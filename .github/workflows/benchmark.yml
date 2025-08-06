@@ -1,0 +1,133 @@
+name: Nightly Benchmarks
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run at 2 AM UTC daily
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            aether-runtime/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Build Aether Runtime
+        run: |
+          cd aether-runtime
+          cargo build --release
+          
+      - name: Start Aether Runtime
+        run: |
+          cd aether-runtime
+          cargo run --release &
+          sleep 5
+          curl --retry 5 --retry-delay 2 http://localhost:3000/health
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          
+      - name: Install Python dependencies
+        run: |
+          cd bench/lm-evaluation-harness
+          pip install -e .
+          pip install evaluate datasets
+          
+      - name: Run basic functionality test
+        run: |
+          cd bench/lm-evaluation-harness
+          python -c "from lm_eval.models.aether_stub import AetherStubLM; print('Aether stub loaded successfully')"
+          
+      - name: Run performance benchmarks
+        run: |
+          cd bench/lm-evaluation-harness
+          mkdir -p ../../results
+          python -m lm_eval \
+            --model aether_stub \
+            --model_args aether_url=http://localhost:3000,model_name=gpt-4o \
+            --tasks hellaswag \
+            --num_fewshot 0 \
+            --batch_size 1 \
+            --limit 10 \
+            --output_path ../../results/nightly_$(date +%Y-%m-%d).json
+            
+      - name: Extract performance metrics
+        run: |
+          # Extract latency metrics from Aether runtime
+          curl http://localhost:3000/metrics > results/metrics_$(date +%Y-%m-%d).txt
+          
+          # Parse metrics for benchmark action
+          python3 -c "
+          import json
+          import re
+          from datetime import datetime
+          
+          # Read metrics
+          with open('results/metrics_$(date +%Y-%m-%d).txt', 'r') as f:
+              metrics = f.read()
+          
+          # Extract execution time
+          exec_time_match = re.search(r'aether_execution_time_seconds_sum (\d+\.?\d*)', metrics)
+          exec_count_match = re.search(r'aether_execution_time_seconds_count (\d+)', metrics)
+          
+          if exec_time_match and exec_count_match:
+              total_time = float(exec_time_match.group(1))
+              count = int(exec_count_match.group(1))
+              avg_latency = total_time / count if count > 0 else 0
+          else:
+              avg_latency = 0
+          
+          # Create benchmark data
+          benchmark_data = {
+              'name': 'Aether Runtime Latency',
+              'unit': 'seconds',
+              'value': avg_latency
+          }
+          
+          with open('results/benchmark_data.json', 'w') as f:
+              json.dump([benchmark_data], f)
+          "
+          
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'customSmallerIsBetter'
+          output-file-path: results/benchmark_data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '110%'  # Alert if performance degrades by more than 10%
+          fail-on-alert: true
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results-${{ github.run_number }}
+          path: |
+            results/
+          retention-days: 30
+

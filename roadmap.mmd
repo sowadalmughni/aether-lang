@@ -1,0 +1,52 @@
+gantt
+    title Aether Programming Language Development Roadmap
+    dateFormat YYYY-MM-DD
+    axisFormat %Y-%m
+
+    section Foundation & Core Language
+    Lexer & Tokenizer           :active, lexer, 2025-08-01, 2025-09-15
+    Parser & AST Generation     :parser, after lexer, 2025-10-30
+    Type System Implementation  :type_system, 2025-09-01, 2025-11-15
+    Semantic Analysis          :semantic, 2025-10-01, 2025-12-15
+
+    section Compiler & Optimization
+    IR Generation              :ir_gen, after semantic, 2026-01-15
+    Graph Optimization Engine  :optimization, 2025-12-01, 2026-03-01
+    Code Generation           :codegen, 2026-01-15, 2026-04-15
+
+    section Runtime & Execution Engine
+    Async Runtime Core        :runtime_core, 2025-10-15, 2026-02-01
+    Multi-level Caching       :caching, 2026-01-01, 2026-05-01
+    Context Management        :context_mgmt, 2026-02-01, 2026-06-01
+    Error Recovery & Retry    :error_handling, 2026-03-01, 2026-07-01
+
+    section LLM Integration & Security
+    LLM Provider Adapters     :llm_adapters, 2025-12-01, 2026-04-01
+    Security & Policy Framework :security, 2026-02-01, 2026-06-15
+    Prompt Injection Protection :prompt_security, 2026-03-15, 2026-07-15
+    Content Filtering         :content_filter, 2026-04-01, 2026-08-01
+
+    section Tooling & Developer Experience
+    Language Server Protocol  :lsp, 2026-03-01, 2026-08-01
+    VS Code Extension        :vscode, 2026-06-01, 2026-10-01
+    Debugger & Profiler      :debugger, 2026-07-01, 2026-11-01
+    Package Manager          :package_mgr, 2026-08-01, 2026-12-01
+
+    section Testing & Quality Assurance
+    Unit Testing Framework   :unit_tests, 2026-01-01, 2026-05-01
+    Integration Testing      :integration_tests, 2026-04-01, 2026-09-01
+    Performance Benchmarking :benchmarks, 2026-06-01, 2026-11-01
+    CI Pipeline             :ci_pipeline, 2026-05-01, 2026-09-15
+
+    section Documentation & Community
+    Language Specification   :lang_spec, 2026-02-01, 2026-07-01
+    API Documentation        :api_docs, 2026-05-01, 2026-10-01
+    Tutorial & Examples      :tutorials, 2026-07-01, 2026-12-01
+    Community Website        :community, 2026-08-01, 2027-01-01
+
+    section Production Readiness
+    Performance Optimization :perf_opt, 2026-09-01, 2027-02-01
+    Scalability Testing     :scalability, 2026-11-01, 2027-03-01
+    Production Deployment    :deployment, 2026-12-01, 2027-04-01
+    Monitoring & Observability :monitoring, 2027-01-01, 2027-05-01
+

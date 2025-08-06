@@ -1,0 +1,340 @@
+title: "Aether Programming Language Development Roadmap"
+dateFormat: "YYYY-MM-DD"
+axisFormat: "%Y-%m"
+
+sections:
+  - title: "Phase 1: Foundation & Core Language"
+    tasks:
+      - title: "Lexer & Tokenizer"
+        id: "lexer"
+        start: "2025-08-01"
+        end: "2025-09-15"
+        owner: "Core Team"
+        fte: 1.5
+        status: "in_progress"
+        
+      - title: "Parser & AST Generation"
+        id: "parser"
+        start: "2025-08-15"
+        end: "2025-10-30"
+        owner: "Core Team"
+        fte: 2.0
+        dependencies: ["lexer"]
+        
+      - title: "Type System Implementation"
+        id: "type_system"
+        start: "2025-09-01"
+        end: "2025-11-15"
+        owner: "Language Team"
+        fte: 2.5
+        dependencies: ["parser"]
+        
+      - title: "Semantic Analysis"
+        id: "semantic"
+        start: "2025-10-01"
+        end: "2025-12-15"
+        owner: "Language Team"
+        fte: 2.0
+        dependencies: ["type_system"]
+
+  - title: "Phase 2: Compiler & Optimization"
+    tasks:
+      - title: "IR Generation"
+        id: "ir_gen"
+        start: "2025-11-01"
+        end: "2026-01-15"
+        owner: "Compiler Team"
+        fte: 2.0
+        dependencies: ["semantic"]
+        
+      - title: "Graph Optimization Engine"
+        id: "optimization"
+        start: "2025-12-01"
+        end: "2026-03-01"
+        owner: "Compiler Team"
+        fte: 2.5
+        dependencies: ["ir_gen"]
+        
+      - title: "Code Generation (Multiple Targets)"
+        id: "codegen"
+        start: "2026-01-15"
+        end: "2026-04-15"
+        owner: "Compiler Team"
+        fte: 3.0
+        dependencies: ["optimization"]
+
+  - title: "Phase 3: Runtime & Execution Engine"
+    tasks:
+      - title: "Async Runtime Core"
+        id: "runtime_core"
+        start: "2025-10-15"
+        end: "2026-02-01"
+        owner: "Runtime Team"
+        fte: 3.0
+        dependencies: ["parser"]
+        
+      - title: "Multi-level Caching System"
+        id: "caching"
+        start: "2026-01-01"
+        end: "2026-05-01"
+        owner: "Runtime Team"
+        fte: 2.5
+        dependencies: ["runtime_core"]
+        
+      - title: "Context Management & State"
+        id: "context_mgmt"
+        start: "2026-02-01"
+        end: "2026-06-01"
+        owner: "Runtime Team"
+        fte: 2.0
+        dependencies: ["caching"]
+        
+      - title: "Error Recovery & Retry Logic"
+        id: "error_handling"
+        start: "2026-03-01"
+        end: "2026-07-01"
+        owner: "Runtime Team"
+        fte: 1.5
+        dependencies: ["context_mgmt"]
+
+  - title: "Phase 4: LLM Integration & Security"
+    tasks:
+      - title: "LLM Provider Adapters"
+        id: "llm_adapters"
+        start: "2025-12-01"
+        end: "2026-04-01"
+        owner: "Integration Team"
+        fte: 2.0
+        dependencies: ["runtime_core"]
+        
+      - title: "Security & Policy Framework"
+        id: "security"
+        start: "2026-02-01"
+        end: "2026-06-15"
+        owner: "Security Team"
+        fte: 2.0
+        dependencies: ["llm_adapters"]
+        
+      - title: "Prompt Injection Protection"
+        id: "prompt_security"
+        start: "2026-03-15"
+        end: "2026-07-15"
+        owner: "Security Team"
+        fte: 1.5
+        dependencies: ["security"]
+        
+      - title: "Content Filtering & Moderation"
+        id: "content_filter"
+        start: "2026-04-01"
+        end: "2026-08-01"
+        owner: "Security Team"
+        fte: 1.5
+        dependencies: ["prompt_security"]
+
+  - title: "Phase 5: Tooling & Developer Experience"
+    tasks:
+      - title: "Language Server Protocol (LSP)"
+        id: "lsp"
+        start: "2026-03-01"
+        end: "2026-08-01"
+        owner: "Tooling Team"
+        fte: 2.0
+        dependencies: ["semantic"]
+        
+      - title: "VS Code Extension"
+        id: "vscode"
+        start: "2026-06-01"
+        end: "2026-10-01"
+        owner: "Tooling Team"
+        fte: 1.5
+        dependencies: ["lsp"]
+        
+      - title: "Debugger & Profiler"
+        id: "debugger"
+        start: "2026-07-01"
+        end: "2026-11-01"
+        owner: "Tooling Team"
+        fte: 2.0
+        dependencies: ["runtime_core"]
+        
+      - title: "Package Manager"
+        id: "package_mgr"
+        start: "2026-08-01"
+        end: "2026-12-01"
+        owner: "Tooling Team"
+        fte: 1.5
+        dependencies: ["codegen"]
+
+  - title: "Phase 6: Testing & Quality Assurance"
+    tasks:
+      - title: "Unit Testing Framework"
+        id: "unit_tests"
+        start: "2026-01-01"
+        end: "2026-05-01"
+        owner: "QA Team"
+        fte: 1.5
+        dependencies: ["runtime_core"]
+        
+      - title: "Integration Testing Suite"
+        id: "integration_tests"
+        start: "2026-04-01"
+        end: "2026-09-01"
+        owner: "QA Team"
+        fte: 2.0
+        dependencies: ["llm_adapters"]
+        
+      - title: "Performance Benchmarking"
+        id: "benchmarks"
+        start: "2026-06-01"
+        end: "2026-11-01"
+        owner: "QA Team"
+        fte: 1.5
+        dependencies: ["caching"]
+        
+      - title: "Continuous Integration Pipeline"
+        id: "ci_pipeline"
+        start: "2026-05-01"
+        end: "2026-09-15"
+        owner: "DevOps Team"
+        fte: 1.0
+        dependencies: ["unit_tests"]
+
+  - title: "Phase 7: Documentation & Community"
+    tasks:
+      - title: "Language Specification"
+        id: "lang_spec"
+        start: "2026-02-01"
+        end: "2026-07-01"
+        owner: "Documentation Team"
+        fte: 1.5
+        dependencies: ["type_system"]
+        
+      - title: "API Documentation"
+        id: "api_docs"
+        start: "2026-05-01"
+        end: "2026-10-01"
+        owner: "Documentation Team"
+        fte: 1.0
+        dependencies: ["llm_adapters"]
+        
+      - title: "Tutorial & Examples"
+        id: "tutorials"
+        start: "2026-07-01"
+        end: "2026-12-01"
+        owner: "Documentation Team"
+        fte: 2.0
+        dependencies: ["vscode"]
+        
+      - title: "Community Website & Forum"
+        id: "community"
+        start: "2026-08-01"
+        end: "2027-01-01"
+        owner: "Community Team"
+        fte: 1.0
+        dependencies: ["tutorials"]
+
+  - title: "Phase 8: Production Readiness"
+    tasks:
+      - title: "Performance Optimization"
+        id: "perf_opt"
+        start: "2026-09-01"
+        end: "2027-02-01"
+        owner: "Performance Team"
+        fte: 2.5
+        dependencies: ["benchmarks"]
+        
+      - title: "Scalability Testing"
+        id: "scalability"
+        start: "2026-11-01"
+        end: "2027-03-01"
+        owner: "Performance Team"
+        fte: 2.0
+        dependencies: ["perf_opt"]
+        
+      - title: "Production Deployment Tools"
+        id: "deployment"
+        start: "2026-12-01"
+        end: "2027-04-01"
+        owner: "DevOps Team"
+        fte: 1.5
+        dependencies: ["scalability"]
+        
+      - title: "Monitoring & Observability"
+        id: "monitoring"
+        start: "2027-01-01"
+        end: "2027-05-01"
+        owner: "DevOps Team"
+        fte: 1.5
+        dependencies: ["deployment"]
+
+milestones:
+  - title: "Alpha Release (Core Language)"
+    date: "2026-01-01"
+    dependencies: ["semantic", "runtime_core"]
+    
+  - title: "Beta Release (LLM Integration)"
+    date: "2026-07-01"
+    dependencies: ["llm_adapters", "security", "lsp"]
+    
+  - title: "Release Candidate"
+    date: "2026-12-01"
+    dependencies: ["package_mgr", "benchmarks", "tutorials"]
+    
+  - title: "Version 1.0 Release"
+    date: "2027-06-01"
+    dependencies: ["monitoring", "community"]
+
+resource_allocation:
+  teams:
+    - name: "Core Team"
+      fte_total: 3.0
+      focus: "Language fundamentals, lexer, parser"
+      
+    - name: "Language Team"
+      fte_total: 4.0
+      focus: "Type system, semantics, language design"
+      
+    - name: "Compiler Team"
+      fte_total: 5.0
+      focus: "IR generation, optimization, code generation"
+      
+    - name: "Runtime Team"
+      fte_total: 6.0
+      focus: "Execution engine, caching, context management"
+      
+    - name: "Integration Team"
+      fte_total: 3.0
+      focus: "LLM providers, external APIs"
+      
+    - name: "Security Team"
+      fte_total: 3.0
+      focus: "Security policies, content filtering"
+      
+    - name: "Tooling Team"
+      fte_total: 4.0
+      focus: "Developer tools, IDE support"
+      
+    - name: "QA Team"
+      fte_total: 3.0
+      focus: "Testing, benchmarking, quality assurance"
+      
+    - name: "Documentation Team"
+      fte_total: 2.5
+      focus: "Specifications, tutorials, examples"
+      
+    - name: "Community Team"
+      fte_total: 1.5
+      focus: "Community building, outreach"
+      
+    - name: "DevOps Team"
+      fte_total: 2.0
+      focus: "CI/CD, deployment, monitoring"
+      
+    - name: "Performance Team"
+      fte_total: 3.0
+      focus: "Optimization, scalability"
+
+  total_fte: 40.0
+  estimated_budget: "$8,000,000"  # Assuming $200k average fully-loaded cost per FTE
+  duration_months: 22
+

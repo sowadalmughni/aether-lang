@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["aether_runtime",[["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/de/trait.Deserialize.html\" title=\"trait serde::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"aether_runtime/security/struct.SecurityConfig.html\" title=\"struct aether_runtime::security::SecurityConfig\">SecurityConfig</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/de/trait.Deserialize.html\" title=\"trait serde::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"aether_runtime/struct.Dag.html\" title=\"struct aether_runtime::Dag\">Dag</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/de/trait.Deserialize.html\" title=\"trait serde::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"aether_runtime/struct.DagExecutionResponse.html\" title=\"struct aether_runtime::DagExecutionResponse\">DagExecutionResponse</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/de/trait.Deserialize.html\" title=\"trait serde::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"aether_runtime/struct.DagNode.html\" title=\"struct aether_runtime::DagNode\">DagNode</a>"],["impl&lt;'de&gt; <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/de/trait.Deserialize.html\" title=\"trait serde::de::Deserialize\">Deserialize</a>&lt;'de&gt; for <a class=\"struct\" href=\"aether_runtime/struct.ExecutionResult.html\" title=\"struct aether_runtime::ExecutionResult\">ExecutionResult</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1596]}

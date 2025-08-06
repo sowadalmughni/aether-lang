@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SecurityError"],"struct":["DefaultInputSanitizer","SecurityConfig","SecurityMiddleware"],"trait":["InputSanitizer"]};

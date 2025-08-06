@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Programming Language - Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+        }
+        
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .card p {
+            margin-bottom: 1.5rem;
+            color: #666;
+        }
+        
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: opacity 0.3s ease;
+        }
+        
+        .btn:hover {
+            opacity: 0.9;
+        }
+        
+        .features {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .features h2 {
+            color: #667eea;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .feature {
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .feature h4 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .feature p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Aether Programming Language</h1>
+            <p>Efficient, Reliable, and Scalable LLM Integration</p>
+        </div>
+        
+        <div class="cards">
+            <div class="card">
+                <h3>🚀 DAG Visualizer</h3>
+                <p>Interactive visualization of Aether execution graphs. Load JSON DAGs, view node details, and execute workflows in real-time.</p>
+                <a href="/" class="btn">Launch Visualizer</a>
+            </div>
+            
+            <div class="card">
+                <h3>📚 API Documentation</h3>
+                <p>Complete Rust documentation for the Aether runtime, including all modules, functions, and implementation details.</p>
+                <a href="/rustdoc/aether_runtime/" class="btn">Browse Docs</a>
+            </div>
+            
+            <div class="card">
+                <h3>📊 Benchmarks</h3>
+                <p>Performance benchmarks and evaluation results comparing Aether against baseline implementations.</p>
+                <a href="https://github.com/aether-lang/aether/actions/workflows/benchmark.yml" class="btn">View Results</a>
+            </div>
+            
+            <div class="card">
+                <h3>🔧 Source Code</h3>
+                <p>Explore the complete Aether implementation including compiler, runtime, and tooling on GitHub.</p>
+                <a href="https://github.com/aether-lang/aether" class="btn">View on GitHub</a>
+            </div>
+        </div>
+        
+        <div class="features">
+            <h2>Key Features</h2>
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="feature-icon">🔧</div>
+                    <h4>Type-Safe LLM Functions</h4>
+                    <p>Define LLM interactions with structured inputs and outputs</p>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">🌊</div>
+                    <h4>Declarative Flows</h4>
+                    <p>Orchestrate complex LLM workflows with automatic optimization</p>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <h4>Intelligent Caching</h4>
+                    <p>Multi-layered caching system for performance and cost optimization</p>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">🛡️</div>
+                    <h4>Security-First</h4>
+                    <p>Built-in prompt injection protection and content filtering</p>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h4>Observability</h4>
+                    <p>Comprehensive metrics, tracing, and debugging tools</p>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <h4>Reproducible</h4>
+                    <p>Deterministic builds and artifact evaluation compliance</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>&copy; 2025 Aether Programming Language. Licensed under MIT.</p>
+        </div>
+    </div>
+</body>
+</html>
+

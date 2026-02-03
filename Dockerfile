@@ -43,11 +43,13 @@ WORKDIR /aether
 # Copy source code
 COPY . .
 
-# Build the Aether runtime
-RUN cd aether-runtime && \
-    cargo build --release && \
-    cargo test && \
-    cargo doc --no-deps
+# Build the Aether workspace (compiler + runtime)
+RUN cargo build --workspace --release && \
+    cargo test --workspace && \
+    cargo doc --workspace --no-deps
+
+# Run compiler-specific tests with verbose output
+RUN cargo test -p aether-compiler --release -- --nocapture
 
 # Build the DAG visualizer
 RUN cd aether-dag-visualizer && \

@@ -1,0 +1,110 @@
+// Parallel flow example
+//
+// Demonstrates:
+// - Flow definitions for workflow orchestration
+// - Parallel execution of independent LLM calls
+// - Struct types for composite results
+// - Data dependency tracking
+
+struct AnalysisResult {
+    summary: string,
+    entities: list<string>,
+    sentiment: Sentiment,
+    key_topics: list<string>
+}
+
+enum Sentiment {
+    Positive,
+    Neutral,
+    Negative
+}
+
+// LLM function to summarize a document
+llm fn summarize(text: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.3,
+    max_tokens: 200,
+    prompt: "Summarize the following text in 2-3 sentences:
+
+{{text}}"
+}
+
+// LLM function to extract named entities
+llm fn extract_entities(text: string) -> list<string> {
+    model: "gpt-4o",
+    temperature: 0.1,
+    prompt: "Extract all named entities (people, organizations, locations) from the text.
+Return as a JSON array of strings.
+
+Text: {{text}}"
+}
+
+// LLM function to classify overall sentiment
+llm fn analyze_sentiment(text: string) -> Sentiment {
+    model: "gpt-4o",
+    temperature: 0.1,
+    prompt: "What is the overall sentiment of this text? Reply with only: Positive, Neutral, or Negative.
+
+Text: {{text}}"
+}
+
+// LLM function to extract key topics
+llm fn extract_topics(text: string) -> list<string> {
+    model: "claude-3-opus",
+    temperature: 0.2,
+    prompt: "What are the 3-5 main topics discussed in this text?
+Return as a JSON array of strings.
+
+Text: {{text}}"
+}
+
+// Flow that orchestrates parallel analysis
+// The compiler can detect that summarize, extract_entities, analyze_sentiment,
+// and extract_topics have no data dependencies and can run in parallel
+flow analyze_document(doc: string) -> AnalysisResult {
+    // These four calls can execute in parallel (no interdependencies)
+    let summary = summarize(doc);
+    let entities = extract_entities(doc);
+    let sentiment = analyze_sentiment(doc);
+    let topics = extract_topics(doc);
+    
+    // Combine results into final struct
+    return AnalysisResult {
+        summary: summary,
+        entities: entities,
+        sentiment: sentiment,
+        key_topics: topics
+    };
+}
+
+// A more complex flow with dependencies
+flow analyze_and_respond(doc: string, user_query: string) -> string {
+    // First, analyze the document (parallel internally)
+    let analysis = analyze_document(doc);
+    
+    // Then, use the analysis to answer the query (depends on analysis)
+    let response = answer_query(user_query, analysis.summary, analysis.entities);
+    
+    return response;
+}
+
+llm fn answer_query(query: string, context: string, entities: list<string>) -> string {
+    model: "gpt-4o",
+    temperature: 0.5,
+    prompt: "Based on the following context and entities, answer the user's query.
+
+Context: {{context}}
+Entities mentioned: {{entities}}
+
+User query: {{query}}"
+}
+
+// Test for the parallel flow
+test "analyze_document_basic" {
+    let doc = "Apple Inc. announced record profits today. CEO Tim Cook expressed optimism about future growth.";
+    let result = analyze_document(doc);
+    
+    assert result.entities.contains("Apple Inc.");
+    assert result.entities.contains("Tim Cook");
+    assert result.sentiment == Sentiment::Positive;
+}

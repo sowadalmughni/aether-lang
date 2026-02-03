@@ -1,0 +1,38 @@
+// Sentiment classification example
+//
+// Demonstrates:
+// - Enum types for categorical outputs
+// - LLM function with structured output
+// - Test blocks for validation
+
+enum Sentiment {
+    Positive,
+    Neutral,
+    Negative
+}
+
+llm fn classify_sentiment(text: string) -> Sentiment {
+    model: "gpt-4o",
+    temperature: 0.1,
+    prompt: "Classify the sentiment of the following text as Positive, Neutral, or Negative.
+
+Text: {{text}}
+
+Respond with only the sentiment classification: Positive, Neutral, or Negative."
+}
+
+// Test block for validating the classifier
+test "sentiment_positive_examples" {
+    let result = classify_sentiment("I absolutely love this product!");
+    assert result == Sentiment::Positive;
+}
+
+test "sentiment_negative_examples" {
+    let result = classify_sentiment("This is terrible and I want a refund.");
+    assert result == Sentiment::Negative;
+}
+
+test "sentiment_neutral_examples" {
+    let result = classify_sentiment("The package arrived on Tuesday.");
+    assert result == Sentiment::Neutral;
+}

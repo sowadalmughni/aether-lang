@@ -1,18 +1,31 @@
 [package]
 name = "aether-runtime"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Runtime execution engine for Aether - type-safe LLM orchestration"
+
+[features]
+default = []
+# Enable real LLM API calls (OpenAI, Anthropic)
+llm-api = ["reqwest"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+petgraph = "0.6"
+lru = "0.12"
+sha2 = "0.10"
+thiserror = { workspace = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-opentelemetry = "0.22"
 opentelemetry = "0.22"
-opentelemetry_sdk = "0.22"
-opentelemetry-jaeger = "0.22"
+opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
+opentelemetry-jaeger = { version = "0.22", features = ["rt-tokio"] }
 prometheus = "0.13"
 axum = "0.7"
 tower = "0.4"

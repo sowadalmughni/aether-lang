@@ -1,0 +1,16 @@
+// A simple hello world example demonstrating a single LLM function
+//
+// This example shows the basic structure of an Aether program with
+// a simple LLM function that generates a greeting.
+
+llm fn greet(name: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.7,
+    prompt: "Generate a friendly greeting for someone named {{name}}. Keep it brief and warm."
+}
+
+// Entry point - in a full implementation, this would be callable
+fn main() {
+    let greeting = greet("Alice");
+    return greeting;
+}

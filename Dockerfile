@@ -6,7 +6,7 @@ FROM ubuntu:22.04
 
 # Set environment variables for reproducible builds
 ENV DEBIAN_FRONTEND=noninteractive
-ENV RUST_VERSION=1.75.0
+ENV RUST_VERSION=1.82.0
 ENV NODE_VERSION=20.18.0
 ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup

@@ -1,0 +1,103 @@
+{
+  "execution_id": "550e8400-e29b-41d4-a716-446655440000",
+  "results": [
+    {
+      "node_id": "input_processor",
+      "output": "Processed input document ready for analysis.",
+      "execution_time_ms": 5,
+      "token_cost": 0,
+      "cache_hit": false,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "level": 0
+    },
+    {
+      "node_id": "summarize",
+      "output": "This document discusses the implementation of AI-driven automation systems in manufacturing, highlighting cost savings of 40% and improved quality control metrics.",
+      "execution_time_ms": 120,
+      "token_cost": 85,
+      "cache_hit": true,
+      "rendered_prompt": "Summarize the following document: Processed input document ready for analysis.",
+      "input_tokens": 45,
+      "output_tokens": 40,
+      "level": 1
+    },
+    {
+      "node_id": "extract_entities",
+      "output": "Entities: [Organization: Acme Corp], [Technology: AI automation], [Metric: 40% cost savings], [Domain: Manufacturing]",
+      "execution_time_ms": 95,
+      "token_cost": 72,
+      "cache_hit": false,
+      "rendered_prompt": "Extract key entities from: Processed input document ready for analysis.",
+      "input_tokens": 38,
+      "output_tokens": 34,
+      "level": 1
+    },
+    {
+      "node_id": "analyze_sentiment",
+      "output": "Positive",
+      "execution_time_ms": 45,
+      "token_cost": 28,
+      "cache_hit": false,
+      "rendered_prompt": "Analyze the sentiment of: Processed input document ready for analysis.",
+      "input_tokens": 20,
+      "output_tokens": 8,
+      "level": 1
+    },
+    {
+      "node_id": "combine_results",
+      "output": "Combined analysis results from all upstream nodes.",
+      "execution_time_ms": 3,
+      "token_cost": 0,
+      "cache_hit": false,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "level": 2
+    },
+    {
+      "node_id": "generate_report",
+      "output": "# Document Analysis Report\n\n## Summary\nThis document discusses AI-driven automation in manufacturing with 40% cost savings.\n\n## Key Entities\n- Acme Corp (Organization)\n- AI automation (Technology)\n- Manufacturing (Domain)\n\n## Sentiment\nThe overall sentiment is positive, indicating favorable outcomes.\n\n## Recommendation\nThe implementation appears successful with measurable improvements.",
+      "execution_time_ms": 180,
+      "token_cost": 145,
+      "cache_hit": false,
+      "rendered_prompt": "Generate a report based on: Summary: This document discusses..., Entities: [Organization: Acme Corp]..., Sentiment: Positive",
+      "input_tokens": 85,
+      "output_tokens": 60,
+      "level": 3
+    }
+  ],
+  "total_execution_time_ms": 448,
+  "total_token_cost": 330,
+  "parallelization_factor": 0.67,
+  "cache_hit_rate": 0.167,
+  "errors": [],
+  "level_execution_times_ms": [5, 120, 3, 180],
+  "max_concurrency_used": 3,
+  "node_execution_times_ms": {
+    "input_processor": 5,
+    "summarize": 120,
+    "extract_entities": 95,
+    "analyze_sentiment": 45,
+    "combine_results": 3,
+    "generate_report": 180
+  },
+  "node_levels": {
+    "input_processor": 0,
+    "summarize": 1,
+    "extract_entities": 1,
+    "analyze_sentiment": 1,
+    "combine_results": 2,
+    "generate_report": 3
+  },
+  "node_status": {
+    "input_processor": { "state": "succeeded", "attempts": 1 },
+    "summarize": { "state": "succeeded", "attempts": 1 },
+    "extract_entities": { "state": "succeeded", "attempts": 1 },
+    "analyze_sentiment": { "state": "succeeded", "attempts": 1 },
+    "combine_results": { "state": "succeeded", "attempts": 1 },
+    "generate_report": { "state": "succeeded", "attempts": 1 }
+  },
+  "aborted": false,
+  "skipped_nodes": [],
+  "tokens_saved": 85
+}

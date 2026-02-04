@@ -1,0 +1,68 @@
+{
+  "execution_id": "660e8400-e29b-41d4-a716-446655440001",
+  "results": [
+    {
+      "node_id": "input_processor",
+      "output": "Processed input document ready for analysis.",
+      "execution_time_ms": 5,
+      "token_cost": 0,
+      "cache_hit": false,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "level": 0
+    },
+    {
+      "node_id": "summarize",
+      "output": "This document discusses AI automation in manufacturing.",
+      "execution_time_ms": 120,
+      "token_cost": 85,
+      "cache_hit": true,
+      "input_tokens": 45,
+      "output_tokens": 40,
+      "level": 1
+    },
+    {
+      "node_id": "extract_entities",
+      "output": null,
+      "execution_time_ms": 50,
+      "token_cost": 38,
+      "cache_hit": false,
+      "input_tokens": 38,
+      "output_tokens": 0,
+      "level": 1
+    }
+  ],
+  "total_execution_time_ms": 175,
+  "total_token_cost": 123,
+  "parallelization_factor": 0.5,
+  "cache_hit_rate": 0.33,
+  "errors": [
+    "Error in node 'extract_entities': Rate limit exceeded. Please retry after 60 seconds."
+  ],
+  "level_execution_times_ms": [5, 120],
+  "max_concurrency_used": 3,
+  "node_execution_times_ms": {
+    "input_processor": 5,
+    "summarize": 120,
+    "extract_entities": 50
+  },
+  "node_levels": {
+    "input_processor": 0,
+    "summarize": 1,
+    "extract_entities": 1,
+    "analyze_sentiment": 1,
+    "combine_results": 2,
+    "generate_report": 3
+  },
+  "node_status": {
+    "input_processor": { "state": "succeeded", "attempts": 1 },
+    "summarize": { "state": "succeeded", "attempts": 1 },
+    "extract_entities": { "state": "failed", "attempts": 3, "error": "Rate limit exceeded" },
+    "analyze_sentiment": { "state": "skipped", "attempts": 0 },
+    "combine_results": { "state": "skipped", "attempts": 0 },
+    "generate_report": { "state": "skipped", "attempts": 0 }
+  },
+  "aborted": true,
+  "skipped_nodes": ["analyze_sentiment", "combine_results", "generate_report"],
+  "tokens_saved": 0
+}

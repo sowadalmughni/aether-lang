@@ -1,0 +1,48 @@
+{
+  "nodes": [
+    {
+      "id": "input_processor",
+      "node_type": "fn",
+      "dependencies": []
+    },
+    {
+      "id": "summarize",
+      "node_type": "llm_fn",
+      "prompt": "Summarize the following document: {{node.input_processor.output}}",
+      "model": "gpt-4o",
+      "dependencies": ["input_processor"]
+    },
+    {
+      "id": "extract_entities",
+      "node_type": "llm_fn",
+      "prompt": "Extract key entities from: {{node.input_processor.output}}",
+      "model": "gpt-4o",
+      "dependencies": ["input_processor"]
+    },
+    {
+      "id": "analyze_sentiment",
+      "node_type": "llm_fn",
+      "prompt": "Analyze the sentiment of: {{node.input_processor.output}}",
+      "model": "gpt-4o",
+      "dependencies": ["input_processor"]
+    },
+    {
+      "id": "combine_results",
+      "node_type": "fn",
+      "dependencies": ["summarize", "extract_entities", "analyze_sentiment"]
+    },
+    {
+      "id": "generate_report",
+      "node_type": "llm_fn",
+      "prompt": "Generate a report based on: Summary: {{node.summarize.output}}, Entities: {{node.extract_entities.output}}, Sentiment: {{node.analyze_sentiment.output}}",
+      "model": "gpt-4o",
+      "dependencies": ["combine_results"]
+    }
+  ],
+  "metadata": {
+    "flow_name": "document_analysis",
+    "source_file": "examples/document_analysis.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-04T10:00:00Z"
+  }
+}

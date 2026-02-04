@@ -63,13 +63,19 @@ aetherc parse path/to/file.aether
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Symbol table | Done | Hierarchical scopes for types and functions |
-| Type collection | Done | Structs, enums, type aliases registered |
-| Function signatures | Done | LLM fn, fn, flow signatures collected |
-| LLM function validation | Done | Checks for required model and prompt |
-| Flow call analysis | Done | Extracts function calls and their arguments |
-| Undefined reference detection | Done | Reports undefined functions in flows |
-| Duplicate definition detection | Done | Reports duplicate type/function names |
+| Symbol table | Done | Hierarchical scopes with push/pop for types, functions, and variables |
+| Type collection | Done | Structs, enums, type aliases registered with full type info |
+| Function signatures | Done | LLM fn, fn, flow signatures collected with parameter types |
+| LLM function validation | Done | Checks for required model and prompt fields |
+| Flow call analysis | Done | Extracts function calls, validates arguments, tracks dependencies |
+| Undefined reference detection | Done | Reports undefined functions with "Did you mean?" suggestions |
+| Duplicate definition detection | Done | Reports duplicate type/function/parameter/field names |
+| Type checking | Done | Forward-only type inference for expressions |
+| Template validation | Done | Validates `{{variable}}`, `{{context.KEY}}`, `{{node.ID.output}}` references |
+| Struct/Enum validation | Done | Duplicate field/variant detection, field access validation |
+| Return type validation | Done | Verifies return expressions match declared types |
+| Error accumulation | Done | Collects up to 10 errors before aborting |
+| Source locations | Done | Line and column numbers in all error messages |
 
 ### Code Generation (MVP Complete)
 
@@ -77,6 +83,7 @@ aetherc parse path/to/file.aether
 |---------|--------|-------|
 | Flow to DAG conversion | Done | One DagNode per LLM fn call |
 | Dependency computation | Done | Derived from data flow (variable bindings) |
+| Cycle detection | Done | Topological sort using Kahn's algorithm |
 | Template placeholder preservation | Done | `{{...}}` kept in `prompt_template` |
 | Template reference metadata | Done | Structured `template_refs` array with kind, path, node_id |
 | Model/temperature/max_tokens | Done | Preserved in DagNode |
@@ -140,8 +147,8 @@ The compiler emits DAG JSON with the following structure:
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| Full type inference | Medium | Infer types for let bindings |
-| Type compatibility checking | Medium | Validate assignments and returns |
+| Full type inference | ✅ Done | Forward-only type inference for let bindings and expressions |
+| Type compatibility checking | ✅ Done | Validates assignments, returns, and argument types |
 | Constrained type validation | Medium | `type Rating = int where 1 <= value <= 5` |
 | Context usage tracking | Low | Analyze context variable usage |
 | Import resolution | Medium | Load and merge imported modules |

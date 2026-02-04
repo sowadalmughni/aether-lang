@@ -6,6 +6,7 @@
 //! - Extract LLM function calls as DagNodes
 //! - Parse template placeholders and emit TemplateRef metadata
 //! - Compute dependencies from data flow order
+//! - Detect circular dependencies via topological sort
 //! - Preserve type information for runtime validation
 
 use crate::ast::{StringTemplate, TemplatePart};
@@ -14,7 +15,7 @@ use aether_core::{
     Dag, DagInput, DagMetadata, DagNode, DagNodeType, Provenance, Sensitivity, SourceLocation,
     TemplateRef, TemplateRefKind,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 // =============================================================================
 // Compiler Configuration
@@ -157,6 +158,9 @@ impl Codegen {
             nodes.push(node);
         }
 
+        // Check for circular dependencies using topological sort (Kahn's algorithm)
+        self.detect_cycles(&nodes)?;
+
         // Build DAG with metadata
         let mut dag = Dag::with_nodes(nodes);
         dag.metadata = DagMetadata {
@@ -224,6 +228,77 @@ impl Codegen {
         }
 
         deps.into_iter().collect()
+    }
+
+    /// Detect circular dependencies using Kahn's algorithm for topological sort.
+    /// Returns an error listing the nodes involved in the cycle if one is found.
+    fn detect_cycles(&self, nodes: &[DagNode]) -> Result<(), String> {
+        if nodes.is_empty() {
+            return Ok(());
+        }
+
+        // Build adjacency list and in-degree map
+        let node_ids: HashSet<_> = nodes.iter().map(|n| n.id.as_str()).collect();
+        let mut in_degree: HashMap<&str, usize> = HashMap::new();
+        let mut adjacency: HashMap<&str, Vec<&str>> = HashMap::new();
+
+        // Initialize all nodes
+        for node in nodes {
+            in_degree.entry(node.id.as_str()).or_insert(0);
+            adjacency.entry(node.id.as_str()).or_insert_with(Vec::new);
+        }
+
+        // Build the graph from dependencies
+        for node in nodes {
+            for dep in &node.dependencies {
+                // Only consider dependencies that are actual nodes in this flow
+                if node_ids.contains(dep.as_str()) {
+                    adjacency.entry(dep.as_str()).or_default().push(node.id.as_str());
+                    *in_degree.entry(node.id.as_str()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        // Kahn's algorithm: start with nodes that have no dependencies
+        let mut queue: VecDeque<&str> = in_degree
+            .iter()
+            .filter(|(_, &deg)| deg == 0)
+            .map(|(&id, _)| id)
+            .collect();
+
+        let mut processed = 0;
+
+        while let Some(node_id) = queue.pop_front() {
+            processed += 1;
+
+            if let Some(dependents) = adjacency.get(node_id) {
+                for &dependent in dependents {
+                    if let Some(deg) = in_degree.get_mut(dependent) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            queue.push_back(dependent);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we couldn't process all nodes, there's a cycle
+        if processed < nodes.len() {
+            // Find nodes that are part of the cycle (those with remaining in-degree > 0)
+            let cycle_nodes: Vec<_> = in_degree
+                .iter()
+                .filter(|(_, &deg)| deg > 0)
+                .map(|(&id, _)| id.to_string())
+                .collect();
+
+            return Err(format!(
+                "Circular dependency detected involving nodes: {}",
+                cycle_nodes.join(", ")
+            ));
+        }
+
+        Ok(())
     }
 
     /// Build prompt template with template refs.
@@ -701,5 +776,104 @@ mod tests {
         assert_eq!(dag.metadata.inputs.len(), 1);
         assert_eq!(dag.metadata.inputs[0].name, "input");
         assert_eq!(dag.metadata.inputs[0].type_name, "string");
+    }
+
+    #[test]
+    fn test_cycle_detection_no_cycle() {
+        // Valid linear flow: A -> B -> C
+        let nodes = vec![
+            DagNode::llm_fn("a")
+                .dependencies(vec![])
+                .build(),
+            DagNode::llm_fn("b")
+                .dependencies(vec!["a".to_string()])
+                .build(),
+            DagNode::llm_fn("c")
+                .dependencies(vec!["b".to_string()])
+                .build(),
+        ];
+
+        let codegen = Codegen::default();
+        assert!(codegen.detect_cycles(&nodes).is_ok());
+    }
+
+    #[test]
+    fn test_cycle_detection_self_reference() {
+        // Node references itself: A -> A
+        let nodes = vec![
+            DagNode::llm_fn("a")
+                .dependencies(vec!["a".to_string()])
+                .build(),
+        ];
+
+        let codegen = Codegen::default();
+        let result = codegen.detect_cycles(&nodes);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Circular dependency"));
+    }
+
+    #[test]
+    fn test_cycle_detection_mutual() {
+        // Mutual dependency: A -> B -> A
+        let nodes = vec![
+            DagNode::llm_fn("a")
+                .dependencies(vec!["b".to_string()])
+                .build(),
+            DagNode::llm_fn("b")
+                .dependencies(vec!["a".to_string()])
+                .build(),
+        ];
+
+        let codegen = Codegen::default();
+        let result = codegen.detect_cycles(&nodes);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Circular dependency"));
+        assert!(err_msg.contains("a") && err_msg.contains("b"));
+    }
+
+    #[test]
+    fn test_cycle_detection_complex() {
+        // Complex cycle: A -> B -> C -> A
+        let nodes = vec![
+            DagNode::llm_fn("a")
+                .dependencies(vec![])
+                .build(),
+            DagNode::llm_fn("b")
+                .dependencies(vec!["a".to_string()])
+                .build(),
+            DagNode::llm_fn("c")
+                .dependencies(vec!["b".to_string()])
+                .build(),
+            DagNode::llm_fn("d")
+                .dependencies(vec!["c".to_string(), "a".to_string()])
+                .build(),
+        ];
+
+        let codegen = Codegen::default();
+        // This should succeed - no cycle, just diamond pattern
+        assert!(codegen.detect_cycles(&nodes).is_ok());
+    }
+
+    #[test]
+    fn test_cycle_detection_parallel_no_cycle() {
+        // Parallel nodes with common dependency
+        let nodes = vec![
+            DagNode::llm_fn("input")
+                .dependencies(vec![])
+                .build(),
+            DagNode::llm_fn("branch_a")
+                .dependencies(vec!["input".to_string()])
+                .build(),
+            DagNode::llm_fn("branch_b")
+                .dependencies(vec!["input".to_string()])
+                .build(),
+            DagNode::llm_fn("merge")
+                .dependencies(vec!["branch_a".to_string(), "branch_b".to_string()])
+                .build(),
+        ];
+
+        let codegen = Codegen::default();
+        assert!(codegen.detect_cycles(&nodes).is_ok());
     }
 }

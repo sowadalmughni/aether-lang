@@ -1,9 +1,35 @@
-name: Nightly Benchmarks
+name: Benchmarks
 
 on:
   schedule:
     - cron: '0 2 * * *'  # Run at 2 AM UTC daily
-  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches: [main]
+    paths:
+      - 'aether-runtime/**'
+      - 'aether-core/**'
+      - 'bench/**'
+      - 'scripts/run_benchmark.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'aether-runtime/**'
+      - 'aether-core/**'
+      - 'bench/**'
+  workflow_dispatch:
+    inputs:
+      requests:
+        description: 'Number of requests per scenario'
+        required: false
+        default: '100'
+      provider:
+        description: 'LLM Provider (mock|openai|anthropic)'
+        required: false
+        default: 'mock'
+
+env:
+  CARGO_TERM_COLOR: always
+  AETHER_PROVIDER: mock
 
 jobs:
   benchmark:
@@ -14,19 +40,20 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-action@stable
         with:
           toolchain: stable
-          override: true
           
       - name: Cache Rust dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            aether-runtime/target
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
           
       - name: Build Aether Runtime
         run: |
@@ -39,80 +66,103 @@ jobs:
           cargo run --release &
           sleep 5
           curl --retry 5 --retry-delay 2 http://localhost:3000/health
+        env:
+          AETHER_PROVIDER: ${{ github.event.inputs.provider || 'mock' }}
           
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           
-      - name: Cache Python dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          
-      - name: Install Python dependencies
+      - name: Run benchmark scenarios
         run: |
-          cd bench/lm-evaluation-harness
-          pip install -e .
-          pip install evaluate datasets
+          mkdir -p results
+          python scripts/run_benchmark.py \
+            --all \
+            --requests ${{ github.event.inputs.requests || '100' }} \
+            --baselines \
+            --output results/
+        env:
+          AETHER_PROVIDER: ${{ github.event.inputs.provider || 'mock' }}
+          AETHER_RUNTIME_URL: http://localhost:3000
           
-      - name: Run basic functionality test
+      - name: Extract performance metrics from Prometheus
         run: |
-          cd bench/lm-evaluation-harness
-          python -c "from lm_eval.models.aether_stub import AetherStubLM; print('Aether stub loaded successfully')"
+          curl http://localhost:3000/metrics > results/prometheus_metrics.txt
           
-      - name: Run performance benchmarks
-        run: |
-          cd bench/lm-evaluation-harness
-          mkdir -p ../../results
-          python -m lm_eval \
-            --model aether_stub \
-            --model_args aether_url=http://localhost:3000,model_name=gpt-4o \
-            --tasks hellaswag \
-            --num_fewshot 0 \
-            --batch_size 1 \
-            --limit 10 \
-            --output_path ../../results/nightly_$(date +%Y-%m-%d).json
-            
-      - name: Extract performance metrics
-        run: |
-          # Extract latency metrics from Aether runtime
-          curl http://localhost:3000/metrics > results/metrics_$(date +%Y-%m-%d).txt
-          
-          # Parse metrics for benchmark action
+          # Parse and format metrics
           python3 -c "
           import json
           import re
           from datetime import datetime
           
-          # Read metrics
-          with open('results/metrics_$(date +%Y-%m-%d).txt', 'r') as f:
+          with open('results/prometheus_metrics.txt', 'r') as f:
               metrics = f.read()
           
-          # Extract execution time
-          exec_time_match = re.search(r'aether_execution_time_seconds_sum (\d+\.?\d*)', metrics)
-          exec_count_match = re.search(r'aether_execution_time_seconds_count (\d+)', metrics)
+          # Extract execution time histogram
+          exec_time_sum = re.search(r'aether_execution_time_seconds_sum (\d+\.?\d*)', metrics)
+          exec_time_count = re.search(r'aether_execution_time_seconds_count (\d+)', metrics)
+          cache_hits = re.search(r'aether_cache_hits_total (\d+)', metrics)
+          cache_misses = re.search(r'aether_cache_misses_total (\d+)', metrics)
           
-          if exec_time_match and exec_count_match:
-              total_time = float(exec_time_match.group(1))
-              count = int(exec_count_match.group(1))
-              avg_latency = total_time / count if count > 0 else 0
-          else:
-              avg_latency = 0
+          total_time = float(exec_time_sum.group(1)) if exec_time_sum else 0
+          count = int(exec_time_count.group(1)) if exec_time_count else 1
+          hits = int(cache_hits.group(1)) if cache_hits else 0
+          misses = int(cache_misses.group(1)) if cache_misses else 0
           
-          # Create benchmark data
-          benchmark_data = {
-              'name': 'Aether Runtime Latency',
-              'unit': 'seconds',
-              'value': avg_latency
-          }
+          avg_latency_ms = (total_time / count * 1000) if count > 0 else 0
+          cache_hit_rate = hits / (hits + misses) if (hits + misses) > 0 else 0
+          
+          benchmark_data = [
+              {'name': 'Average Latency', 'unit': 'ms', 'value': round(avg_latency_ms, 2)},
+              {'name': 'Cache Hit Rate', 'unit': '%', 'value': round(cache_hit_rate * 100, 2)}
+          ]
           
           with open('results/benchmark_data.json', 'w') as f:
-              json.dump([benchmark_data], f)
+              json.dump(benchmark_data, f)
+          
+          print(f'Average latency: {avg_latency_ms:.2f}ms')
+          print(f'Cache hit rate: {cache_hit_rate*100:.1f}%')
           "
           
-      - name: Store benchmark result
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const resultsDir = 'results';
+            const files = fs.readdirSync(resultsDir).filter(f => f.startsWith('benchmark_') && f.endsWith('.json'));
+            if (files.length === 0) return;
+            
+            const latestFile = files.sort().pop();
+            const results = JSON.parse(fs.readFileSync(path.join(resultsDir, latestFile), 'utf8'));
+            
+            let body = '## 📊 Benchmark Results\n\n';
+            body += '| Scenario | Mode | Requests | p50 (ms) | p95 (ms) | Cache Hit % |\n';
+            body += '|----------|------|----------|----------|----------|-------------|\n';
+            
+            for (const r of results.results || []) {
+              if (r.scenario) {
+                body += `| ${r.scenario} | ${r.mode} | ${r.requests} | ${r.latency_p50_ms} | ${r.latency_p95_ms} | ${(r.cache_hit_rate * 100).toFixed(1)}% |\n`;
+              } else if (r.baseline) {
+                body += `| ${r.baseline} | baseline | ${r.requests || 'N/A'} | ${r.latency_p50_ms || 'N/A'} | ${r.latency_p95_ms || 'N/A'} | ${((r.cache_hit_rate || 0) * 100).toFixed(1)}% |\n`;
+              }
+            }
+            
+            body += `\n*Measured at ${results.benchmark_run?.timestamp || 'N/A'} with provider: ${results.benchmark_run?.provider || 'mock'}*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          
+      - name: Store benchmark result (nightly only)
+        if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'customSmallerIsBetter'
@@ -120,14 +170,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: true
-          alert-threshold: '110%'  # Alert if performance degrades by more than 10%
+          alert-threshold: '110%'
           fail-on-alert: true
           
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.run_number }}
-          path: |
-            results/
-          retention-days: 30
+          name: benchmark-results-${{ github.sha }}
+          path: results/
+          retention-days: 90
 

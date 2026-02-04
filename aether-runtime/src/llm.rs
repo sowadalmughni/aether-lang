@@ -25,16 +25,35 @@ pub struct LlmConfig {
     pub max_retries: u32,
     /// Default model to use
     pub default_model: String,
+    /// Force a specific provider (from AETHER_PROVIDER env var: mock|openai|anthropic)
+    pub forced_provider: Option<LlmProvider>,
 }
 
 impl Default for LlmConfig {
     fn default() -> Self {
+        // Parse AETHER_PROVIDER env var to force a specific provider
+        let forced_provider = std::env::var("AETHER_PROVIDER")
+            .ok()
+            .and_then(|s| match s.to_lowercase().as_str() {
+                "mock" => Some(LlmProvider::Mock),
+                "openai" => Some(LlmProvider::OpenAI),
+                "anthropic" => Some(LlmProvider::Anthropic),
+                _ => {
+                    tracing::warn!(
+                        "Unknown AETHER_PROVIDER value '{}', valid options: mock, openai, anthropic",
+                        s
+                    );
+                    None
+                }
+            });
+
         Self {
             openai_api_key: std::env::var("OPENAI_API_KEY").ok(),
             anthropic_api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
             timeout_secs: 30,
             max_retries: 3,
             default_model: "gpt-4o-mini".to_string(),
+            forced_provider,
         }
     }
 }
@@ -632,7 +651,51 @@ pub mod real {
 // =============================================================================
 
 /// Create an LLM client based on configuration and desired provider
+///
+/// Provider selection priority:
+/// 1. AETHER_PROVIDER env var (mock|openai|anthropic) - forces specific provider
+/// 2. Model name prefix detection (gpt-* -> OpenAI, claude-* -> Anthropic)
+/// 3. Falls back to mock if no API keys configured
 pub fn create_client(config: &LlmConfig, model: &str) -> Box<dyn LlmClient> {
+    // Check for forced provider from AETHER_PROVIDER env var
+    if let Some(forced) = config.forced_provider {
+        match forced {
+            LlmProvider::Mock => {
+                info!("AETHER_PROVIDER=mock, using MockLlmClient");
+                return Box::new(MockLlmClient::new());
+            }
+            #[cfg(feature = "llm-api")]
+            LlmProvider::OpenAI => {
+                if let Some(api_key) = &config.openai_api_key {
+                    info!("AETHER_PROVIDER=openai, using OpenAI API for model: {}", model);
+                    return Box::new(real::OpenAIClient::new(api_key.clone()));
+                } else {
+                    warn!("AETHER_PROVIDER=openai but OPENAI_API_KEY not set, falling back to mock");
+                    return Box::new(MockLlmClient::new());
+                }
+            }
+            #[cfg(feature = "llm-api")]
+            LlmProvider::Anthropic => {
+                if let Some(api_key) = &config.anthropic_api_key {
+                    info!("AETHER_PROVIDER=anthropic, using Anthropic API for model: {}", model);
+                    return Box::new(real::AnthropicClient::new(api_key.clone()));
+                } else {
+                    warn!("AETHER_PROVIDER=anthropic but ANTHROPIC_API_KEY not set, falling back to mock");
+                    return Box::new(MockLlmClient::new());
+                }
+            }
+            #[cfg(not(feature = "llm-api"))]
+            LlmProvider::OpenAI | LlmProvider::Anthropic => {
+                warn!(
+                    "AETHER_PROVIDER={:?} but llm-api feature not enabled, falling back to mock",
+                    forced
+                );
+                return Box::new(MockLlmClient::new());
+            }
+        }
+    }
+
+    // No forced provider - use model-based detection
     #[cfg(feature = "llm-api")]
     {
         let provider = config.provider_for_model(model);
@@ -727,5 +790,48 @@ mod tests {
         let config = LlmConfig::default();
         assert!(config.timeout_secs > 0);
         assert!(config.max_retries > 0);
+    }
+
+    #[test]
+    fn test_forced_provider_parsing() {
+        // Test that forced_provider field is properly initialized
+        // (actual env var testing requires process isolation)
+        let config = LlmConfig {
+            openai_api_key: None,
+            anthropic_api_key: None,
+            timeout_secs: 30,
+            max_retries: 3,
+            default_model: "gpt-4o-mini".to_string(),
+            forced_provider: Some(LlmProvider::Mock),
+        };
+        assert_eq!(config.forced_provider, Some(LlmProvider::Mock));
+
+        let config_openai = LlmConfig {
+            forced_provider: Some(LlmProvider::OpenAI),
+            ..config.clone()
+        };
+        assert_eq!(config_openai.forced_provider, Some(LlmProvider::OpenAI));
+
+        let config_anthropic = LlmConfig {
+            forced_provider: Some(LlmProvider::Anthropic),
+            ..config.clone()
+        };
+        assert_eq!(config_anthropic.forced_provider, Some(LlmProvider::Anthropic));
+    }
+
+    #[tokio::test]
+    async fn test_create_client_forced_mock() {
+        let config = LlmConfig {
+            openai_api_key: Some("sk-test".to_string()),
+            anthropic_api_key: Some("sk-ant-test".to_string()),
+            timeout_secs: 30,
+            max_retries: 3,
+            default_model: "gpt-4o-mini".to_string(),
+            forced_provider: Some(LlmProvider::Mock),
+        };
+
+        // Even with API keys present, forced mock should return MockLlmClient
+        let client = create_client(&config, "gpt-4o");
+        assert_eq!(client.provider(), LlmProvider::Mock);
     }
 }

@@ -171,10 +171,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Resources
 
-- **Whitepaper**: [Designing a Programming Language for Efficient LLM Integration](docs/whitepaper.pdf)
+- **Whitepaper**: [Aether: A Domain-Specific Language for Type-Safe LLM Orchestration](whitepaper/WHITEPAPER.md)
+- **Changelog**: [Version History](whitepaper/CHANGELOG.md)
+- **Benchmarks Documentation**: [Benchmarks Guide](docs/benchmarks.md)
 - **API Documentation**: [Rustdoc](https://aether-lang.github.io/aether/rustdoc/)
 - **Live Demo**: [DAG Visualizer](https://aether-lang.github.io/aether/)
-- **Benchmarks**: [Performance Results](https://github.com/aether-lang/aether/actions/workflows/benchmark.yml)
+- **CI Benchmarks**: [Performance Results](https://github.com/aether-lang/aether/actions/workflows/benchmark.yml)
 
 ---
 

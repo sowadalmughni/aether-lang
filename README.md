@@ -211,7 +211,7 @@ cargo doc --workspace --no-deps
 | **Phase 4: IDE Tooling** | 📋 Planned | VS Code extension, LSP support |
 | **Phase 5: Production** | 📋 Planned | Multi-level caching, guardrails, taint tracking |
 
-See [roadmap.gantt.yml](roadmap.gantt.yml) and [whitepaper v2.5](whitepaper/aether-whitepaper-v2.5-canonical.md) for details.
+See [roadmap.gantt.yml](roadmap.gantt.yml) and [whitepaper](whitepaper/WHITEPAPER.md) for details.
 
 ## 🤝 Contributing
 
@@ -240,8 +240,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Resources
 
-- **Whitepaper v2.5**: [Aether: A Domain-Specific Language for Type-Safe LLM Orchestration](whitepaper/aether-whitepaper-v2.5-canonical.md)
-- **Changelog**: [Version History](whitepaper/aether-changelog-v2.5.md)
+- **Whitepaper**: [Aether: A Domain-Specific Language for Type-Safe LLM Orchestration](whitepaper/WHITEPAPER.md)
+- **Changelog**: [Version History](whitepaper/CHANGELOG.md)
 - **API Documentation**: [Rustdoc](https://aether-lang.github.io/aether/rustdoc/)
 - **Live Demo**: [DAG Visualizer](https://aether-lang.github.io/aether/)
 - **Baseline Benchmarks**: [bench/baselines/README.md](bench/baselines/README.md)

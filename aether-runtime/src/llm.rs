@@ -87,6 +87,31 @@ pub struct LlmResponse {
     pub output_tokens: u32,
     pub total_tokens: u32,
     pub latency_ms: u64,
+    /// Whether this response was served from cache
+    #[serde(default)]
+    pub cached: bool,
+}
+
+impl LlmResponse {
+    /// Create a cached version of this response (0 tokens charged)
+    pub fn as_cached(&self) -> Self {
+        Self {
+            content: self.content.clone(),
+            model: self.model.clone(),
+            provider: self.provider.clone(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            latency_ms: 0,
+            cached: true,
+        }
+    }
+
+    /// Mark this response as cached
+    pub fn with_cached(mut self, cached: bool) -> Self {
+        self.cached = cached;
+        self
+    }
 }
 
 // =============================================================================
@@ -198,17 +223,89 @@ pub enum LlmError {
 // =============================================================================
 
 /// Mock LLM client for testing without real API calls
+///
+/// Features:
+/// - Configurable latency to simulate network delays
+/// - Configurable responses keyed by prompt hash for deterministic testing
+/// - Default fallback response when no match found
 pub struct MockLlmClient {
     latency_ms: u64,
+    /// Map of prompt hash -> response content for deterministic testing
+    responses: std::collections::HashMap<String, String>,
+    /// Whether to fail requests (for error testing)
+    should_fail: bool,
+    /// Number of times to fail before succeeding (for retry testing)
+    fail_count: std::sync::atomic::AtomicU32,
+    fail_until: u32,
 }
 
 impl MockLlmClient {
     pub fn new() -> Self {
-        Self { latency_ms: 50 }
+        Self {
+            latency_ms: 50,
+            responses: std::collections::HashMap::new(),
+            should_fail: false,
+            fail_count: std::sync::atomic::AtomicU32::new(0),
+            fail_until: 0,
+        }
     }
 
     pub fn with_latency(latency_ms: u64) -> Self {
-        Self { latency_ms }
+        Self {
+            latency_ms,
+            ..Self::new()
+        }
+    }
+
+    /// Add a deterministic response for a specific prompt
+    pub fn with_response(mut self, prompt: &str, response: &str) -> Self {
+        let hash = Self::hash_prompt(prompt);
+        self.responses.insert(hash, response.to_string());
+        self
+    }
+
+    /// Add responses from a map
+    pub fn with_responses(mut self, responses: std::collections::HashMap<String, String>) -> Self {
+        for (prompt, response) in responses {
+            let hash = Self::hash_prompt(&prompt);
+            self.responses.insert(hash, response);
+        }
+        self
+    }
+
+    /// Configure to fail all requests (for error testing)
+    pub fn with_failure(mut self) -> Self {
+        self.should_fail = true;
+        self
+    }
+
+    /// Configure to fail N times before succeeding (for retry testing)
+    pub fn fail_n_times(mut self, n: u32) -> Self {
+        self.fail_until = n;
+        self
+    }
+
+    /// Hash a prompt for lookup
+    fn hash_prompt(prompt: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(prompt.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Get response for a prompt (or generate default)
+    fn get_response(&self, prompt: &str, model: &str) -> String {
+        let hash = Self::hash_prompt(prompt);
+        if let Some(response) = self.responses.get(&hash) {
+            response.clone()
+        } else {
+            // Generate deterministic default response
+            format!(
+                "[Mock Response]\nModel: {}\nPrompt hash: {}\nThis is a deterministic mock response for testing.",
+                model,
+                &hash[..16]
+            )
+        }
     }
 }
 
@@ -224,22 +321,37 @@ impl LlmClient for MockLlmClient {
     async fn complete(&self, request: LlmRequest) -> Result<LlmResponse, LlmError> {
         let start = std::time::Instant::now();
 
+        // Check if we should fail
+        if self.should_fail {
+            return Err(LlmError::RequestFailed("Mock failure mode enabled".to_string()));
+        }
+
+        // Check fail_n_times logic
+        if self.fail_until > 0 {
+            let count = self.fail_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if count < self.fail_until {
+                return Err(LlmError::RequestFailed(format!(
+                    "Mock failure {}/{} (will succeed after {} more attempts)",
+                    count + 1,
+                    self.fail_until,
+                    self.fail_until - count - 1
+                )));
+            }
+        }
+
         // Simulate network latency
         tokio::time::sleep(Duration::from_millis(self.latency_ms)).await;
 
         let input_tokens = (request.prompt.len() / 4) as u32;
         let output_tokens = 50 + (input_tokens / 4);
 
-        let content = format!(
-            "[Mock LLM Response]\nModel: {}\nPrompt length: {} chars\nGenerated mock response for testing.",
-            request.model,
-            request.prompt.len()
-        );
+        let content = self.get_response(&request.prompt, &request.model);
 
         info!(
             model = %request.model,
             input_tokens,
             output_tokens,
+            latency_ms = self.latency_ms,
             "Mock LLM completion"
         );
 
@@ -251,6 +363,7 @@ impl LlmClient for MockLlmClient {
             output_tokens,
             total_tokens: input_tokens + output_tokens,
             latency_ms: start.elapsed().as_millis() as u64,
+            cached: false,
         })
     }
 
@@ -386,6 +499,7 @@ pub mod real {
                 output_tokens: openai_response.usage.completion_tokens,
                 total_tokens: openai_response.usage.total_tokens,
                 latency_ms,
+                cached: false,
             })
         }
 
@@ -503,6 +617,7 @@ pub mod real {
                 total_tokens: anthropic_response.usage.input_tokens
                     + anthropic_response.usage.output_tokens,
                 latency_ms,
+                cached: false,
             })
         }
 

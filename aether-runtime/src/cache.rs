@@ -1,10 +1,14 @@
 //! Caching layer for Aether runtime
 //!
 //! Implements multi-level caching for LLM calls:
-//! - Level 1: Exact-match cache (LRU, in-memory)
+//! - Level 1: Exact-match cache (LRU, in-memory) - IMPLEMENTED
 //! - Level 2: Semantic cache (planned - vector similarity)
 //! - Level 3: Provider prefix cache hints (planned)
+//!
+//! Cache key is computed from: hash(model + rendered_prompt + temperature + other params)
+//! Cache hits return stored response with 0 token cost, flagged as cached: true
 
+use aether_core::DagNode;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -43,6 +47,47 @@ pub struct CachedResponse {
     pub token_cost: u32,
     pub cache_key: String,
     pub cached_at: u64,
+    /// Original input/output tokens (for metrics, not charged on cache hit)
+    #[serde(default)]
+    pub original_input_tokens: u32,
+    #[serde(default)]
+    pub original_output_tokens: u32,
+    /// Model that generated this response
+    #[serde(default)]
+    pub model: String,
+    /// Provider that generated this response
+    #[serde(default)]
+    pub provider: String,
+}
+
+impl CachedResponse {
+    /// Create a new cached response
+    pub fn new(output: String, token_cost: u32, cache_key: String) -> Self {
+        Self {
+            output,
+            token_cost,
+            cache_key,
+            cached_at: current_timestamp(),
+            original_input_tokens: 0,
+            original_output_tokens: 0,
+            model: String::new(),
+            provider: String::new(),
+        }
+    }
+
+    /// Builder pattern: set original tokens
+    pub fn with_tokens(mut self, input: u32, output: u32) -> Self {
+        self.original_input_tokens = input;
+        self.original_output_tokens = output;
+        self
+    }
+
+    /// Builder pattern: set model info
+    pub fn with_model(mut self, model: impl Into<String>, provider: impl Into<String>) -> Self {
+        self.model = model.into();
+        self.provider = provider.into();
+        self
+    }
 }
 
 /// Cache key components for exact-match lookup
@@ -61,6 +106,19 @@ impl CacheKey {
             model,
             temperature: None,
             max_tokens: None,
+        }
+    }
+
+    /// Create a CacheKey from a DagNode and rendered prompt
+    ///
+    /// This is the recommended way to create cache keys during DAG execution,
+    /// as it captures all relevant parameters for deterministic caching.
+    pub fn from_dag_node(node: &DagNode, rendered_prompt: &str) -> Self {
+        Self {
+            prompt: rendered_prompt.to_string(),
+            model: node.model.clone().unwrap_or_else(|| "default".to_string()),
+            temperature: node.temperature,
+            max_tokens: node.max_tokens,
         }
     }
 
@@ -87,14 +145,26 @@ impl CacheKey {
         }
         format!("{:x}", hasher.finalize())
     }
+
+    /// Get the prompt (for debugging/logging)
+    pub fn prompt(&self) -> &str {
+        &self.prompt
+    }
+
+    /// Get the model name
+    pub fn model(&self) -> &str {
+        &self.model
+    }
 }
 
 /// Cache statistics
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CacheStats {
     pub hits: u64,
     pub misses: u64,
     pub evictions: u64,
+    /// Total tokens saved by cache hits
+    pub tokens_saved: u64,
 }
 
 impl CacheStats {
@@ -105,6 +175,11 @@ impl CacheStats {
         } else {
             self.hits as f64 / total as f64
         }
+    }
+
+    /// Estimated cost savings (rough estimate based on tokens)
+    pub fn estimated_savings(&self, cost_per_1k_tokens: f64) -> f64 {
+        (self.tokens_saved as f64 / 1000.0) * cost_per_1k_tokens
     }
 }
 
@@ -144,9 +219,11 @@ impl LlmCache {
 
         if let Some(response) = cache.get(&hash) {
             stats.hits += 1;
+            stats.tokens_saved += (response.original_input_tokens + response.original_output_tokens) as u64;
             info!(
                 cache_key_hash = %hash,
                 hit_rate = %stats.hit_rate(),
+                tokens_saved = stats.tokens_saved,
                 "Cache hit"
             );
             Some(response.clone())

@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "test_cache_flow",
+    "source_file": "test_dag_cache.aether",
+    "compiler_version": "0.1.0",
+    "inputs": [],
+    "output_type": "String"
+  },
+  "nodes": [
+    {
+      "id": "cached_query_1",
+      "node_type": "llm_fn",
+      "name": "cached_query",
+      "prompt_template": "What is 2 + 2? Give a single number answer.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.0,
+      "max_tokens": 10,
+      "dependencies": []
+    },
+    {
+      "id": "cached_query_2",
+      "node_type": "llm_fn",
+      "name": "cached_query_2",
+      "prompt_template": "What is the capital of France? One word answer.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.0,
+      "max_tokens": 10,
+      "dependencies": []
+    },
+    {
+      "id": "combine_results",
+      "node_type": "llm_fn",
+      "name": "combine_results",
+      "prompt_template": "Combine these facts: {{node.cached_query_1.output}} and {{node.cached_query_2.output}}",
+      "template_refs": [
+        {
+          "raw": "{{node.cached_query_1.output}}",
+          "kind": "node_output",
+          "path": [],
+          "node_id": "cached_query_1",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low"
+        },
+        {
+          "raw": "{{node.cached_query_2.output}}",
+          "kind": "node_output",
+          "path": [],
+          "node_id": "cached_query_2",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low"
+        }
+      ],
+      "model": "gpt-4o-mini",
+      "temperature": 0.0,
+      "max_tokens": 50,
+      "dependencies": ["cached_query_1", "cached_query_2"]
+    }
+  ]
+}

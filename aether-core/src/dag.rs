@@ -416,6 +416,88 @@ impl Default for Dag {
 // Execution Result Types (for runtime)
 // =============================================================================
 
+/// State of a node during/after execution
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeState {
+    /// Node has not started execution
+    Pending,
+    /// Node is currently executing
+    Running,
+    /// Node completed successfully
+    Succeeded,
+    /// Node failed with an error
+    Failed,
+    /// Node was skipped (due to dependency failure or abort)
+    Skipped,
+}
+
+impl Default for NodeState {
+    fn default() -> Self {
+        NodeState::Pending
+    }
+}
+
+/// Status information for a single node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeStatus {
+    pub state: NodeState,
+    /// Number of execution attempts (for retry tracking)
+    #[serde(default)]
+    pub attempts: u32,
+    /// Error message if failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Reason for skip if skipped
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
+}
+
+impl Default for NodeStatus {
+    fn default() -> Self {
+        Self {
+            state: NodeState::Pending,
+            attempts: 0,
+            error: None,
+            skip_reason: None,
+        }
+    }
+}
+
+impl NodeStatus {
+    pub fn succeeded() -> Self {
+        Self {
+            state: NodeState::Succeeded,
+            attempts: 1,
+            error: None,
+            skip_reason: None,
+        }
+    }
+
+    pub fn failed(error: impl Into<String>) -> Self {
+        Self {
+            state: NodeState::Failed,
+            attempts: 1,
+            error: Some(error.into()),
+            skip_reason: None,
+        }
+    }
+
+    pub fn skipped(reason: impl Into<String>) -> Self {
+        Self {
+            state: NodeState::Skipped,
+            attempts: 0,
+            error: None,
+            skip_reason: Some(reason.into()),
+        }
+    }
+
+    pub fn with_attempts(mut self, attempts: u32) -> Self {
+        self.attempts = attempts;
+        self
+    }
+}
+
 /// Result of executing a single node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeExecutionResult {
@@ -427,6 +509,45 @@ pub struct NodeExecutionResult {
     /// The rendered prompt after substitution (for debugging)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendered_prompt: Option<String>,
+    /// Input tokens used (before cache)
+    #[serde(default)]
+    pub input_tokens: u32,
+    /// Output tokens used (before cache)
+    #[serde(default)]
+    pub output_tokens: u32,
+    /// Which level this node was in
+    #[serde(default)]
+    pub level: usize,
+}
+
+/// Error policy for handling failures during parallel execution
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorPolicy {
+    /// Stop scheduling new nodes immediately on failure
+    Fail,
+    /// Continue executing independent nodes, skip dependents
+    Skip,
+    /// Retry failed nodes according to retry config
+    Retry,
+}
+
+impl Default for ErrorPolicy {
+    fn default() -> Self {
+        ErrorPolicy::Fail
+    }
+}
+
+impl ErrorPolicy {
+    /// Parse from string (for DAG execution hints)
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "skip" => ErrorPolicy::Skip,
+            "retry" => ErrorPolicy::Retry,
+            "fail" | "fail_fast" => ErrorPolicy::Fail,
+            _ => ErrorPolicy::Fail,
+        }
+    }
 }
 
 /// Result of executing an entire DAG.
@@ -439,6 +560,40 @@ pub struct DagExecutionResponse {
     pub parallelization_factor: f64,
     pub cache_hit_rate: f64,
     pub errors: Vec<String>,
+
+    // === New fields for observability ===
+
+    /// Execution time for each level (to prove parallel speedup)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub level_execution_times_ms: Vec<u64>,
+
+    /// Maximum concurrency actually used during execution
+    #[serde(default)]
+    pub max_concurrency_used: u32,
+
+    /// Mapping of node_id to execution time (for detailed analysis)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub node_execution_times_ms: HashMap<String, u64>,
+
+    /// Mapping of node_id to level (for understanding DAG structure)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub node_levels: HashMap<String, usize>,
+
+    /// Status of each node (state, attempts, errors)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub node_status: HashMap<String, NodeStatus>,
+
+    /// Whether execution was aborted due to error
+    #[serde(default)]
+    pub aborted: bool,
+
+    /// List of nodes that were skipped
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_nodes: Vec<String>,
+
+    /// Total tokens saved by cache hits
+    #[serde(default)]
+    pub tokens_saved: u32,
 }
 
 // =============================================================================

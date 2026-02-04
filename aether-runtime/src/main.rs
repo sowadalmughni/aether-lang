@@ -1,13 +1,15 @@
 //! Aether Runtime
 //!
 //! HTTP server for executing Aether DAG workflows with:
-//! - Topological sorting for correct execution order
-//! - Parallel execution of independent nodes
-//! - LRU caching for LLM responses
+//! - Topological sorting with cycle detection for correct execution order
+//! - Parallel execution of independent nodes (dependency-aware)
+//! - LRU caching for LLM responses (exact-match, Level 1)
 //! - Security middleware for prompt injection detection
 //! - Prometheus metrics and OpenTelemetry tracing
+//! - ExecutionContext for template substitution
+//! - Error policies: Fail, Skip, Retry
 
-use aether_core::{Dag, DagNode, DagNodeType};
+use aether_core::{Dag, DagNode, DagNodeType, NodeState, NodeStatus, ErrorPolicy};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -28,13 +30,17 @@ use tracing::{info, instrument, span, warn, Level};
 use uuid::Uuid;
 
 mod cache;
+mod context;
 mod llm;
 mod security;
 mod telemetry;
+mod template;
 
 use cache::{CacheConfig, CacheKey, CachedResponse, LlmCache, current_timestamp};
+use context::ExecutionContext;
 use llm::{LlmClient, LlmConfig, LlmRequest, create_client};
 use security::{DefaultInputSanitizer, SecurityConfig, SecurityError, SecurityMiddleware};
+use template::{render_node_prompt, RenderOptions};
 
 // =============================================================================
 // Data Structures (re-export from aether-core and add runtime-specific types)
@@ -135,6 +141,15 @@ impl Default for Metrics {
 // DAG Execution Engine
 // =============================================================================
 
+/// Result of topological sort with levels
+#[derive(Debug)]
+pub struct DagLevelInfo {
+    /// Nodes grouped by execution level
+    pub levels: Vec<Vec<String>>,
+    /// Mapping of node_id to its level
+    pub node_levels: HashMap<String, usize>,
+}
+
 /// Build a directed graph from DAG nodes for topological sorting
 fn build_dependency_graph(dag: &Dag) -> (DiGraph<String, ()>, HashMap<String, NodeIndex>) {
     let mut graph = DiGraph::new();
@@ -161,11 +176,18 @@ fn build_dependency_graph(dag: &Dag) -> (DiGraph<String, ()>, HashMap<String, No
 }
 
 /// Get execution levels (nodes that can run in parallel at each level)
-fn get_execution_levels(dag: &Dag) -> Result<Vec<Vec<String>>, String> {
+/// Returns detailed level info including node-to-level mapping
+fn get_execution_levels(dag: &Dag) -> Result<DagLevelInfo, String> {
     let (graph, node_indices) = build_dependency_graph(dag);
 
     // Topological sort to detect cycles
-    let sorted = toposort(&graph, None).map_err(|_| "Cycle detected in DAG".to_string())?;
+    let sorted = toposort(&graph, None).map_err(|cycle| {
+        // Try to identify the node involved in the cycle
+        let node_id = graph.node_weight(cycle.node_id())
+            .map(|s| s.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        format!("Cycle detected in DAG involving node '{}'", node_id)
+    })?;
 
     // Create reverse mapping
     let index_to_id: HashMap<NodeIndex, &String> =
@@ -197,7 +219,15 @@ fn get_execution_levels(dag: &Dag) -> Result<Vec<Vec<String>>, String> {
     let max_level = node_levels.values().max().copied().unwrap_or(0);
     let mut levels: Vec<Vec<String>> = vec![Vec::new(); max_level + 1];
 
-    for (node_id, level) in node_levels {
+    for (node_id, level) in &node_levels {
+        levels[*level].push(node_id.clone());
+    }
+
+    Ok(DagLevelInfo {
+        levels,
+        node_levels,
+    })
+}
         levels[level].push(node_id);
     }
 
@@ -210,23 +240,34 @@ struct InternalNodeResult {
     output: String,
     token_cost: u32,
     cache_hit: bool,
+    input_tokens: u32,
+    output_tokens: u32,
+    rendered_prompt: Option<String>,
 }
 
-/// Execute a single node
-#[instrument(skip(security, cache, llm_config, outputs))]
+/// Execute a single node with template rendering, caching, and LLM call
+#[instrument(skip(security, cache, llm_config, context, outputs))]
 async fn execute_node(
     node: &DagNode,
     security: &SecurityMiddleware,
     cache: &LlmCache,
     llm_config: &LlmConfig,
+    context: &ExecutionContext,
     outputs: &HashMap<String, String>,
 ) -> Result<InternalNodeResult, String> {
     // Apply security checks if this is an LLM node with a prompt
     if node.node_type == DagNodeType::LlmFn {
         // Try prompt_template first, then legacy prompt field
-        let prompt = node.prompt_template.as_ref().or(node.prompt.as_ref());
-        if let Some(prompt) = prompt {
-            match security.process_prompt(prompt).await {
+        let template = node.prompt_template.as_ref().or(node.prompt.as_ref());
+        if let Some(template) = template {
+            // Render the template with context and node outputs
+            let render_result = render_node_prompt(node, context, outputs)
+                .map_err(|e| format!("Template rendering failed: {}", e))?;
+
+            let resolved_prompt = render_result.rendered;
+
+            // Security check on rendered prompt
+            match security.process_prompt(&resolved_prompt).await {
                 Ok(_) => {
                     info!(node_id = %node.id, "Security check passed for prompt");
                 }
@@ -244,21 +285,8 @@ async fn execute_node(
                 }
             }
 
-            // Check cache
-            let cache_key = CacheKey::new(
-                prompt.clone(),
-                node.model.clone().unwrap_or_else(|| "default".to_string()),
-            );
-            let cache_key = if let Some(temp) = node.temperature {
-                cache_key.with_temperature(temp)
-            } else {
-                cache_key
-            };
-            let cache_key = if let Some(max) = node.max_tokens {
-                cache_key.with_max_tokens(max)
-            } else {
-                cache_key
-            };
+            // Check cache using the rendered prompt
+            let cache_key = CacheKey::from_dag_node(node, &resolved_prompt);
 
             if let Some(cached) = cache.get(&cache_key) {
                 info!(node_id = %node.id, "Cache hit - returning cached response");
@@ -266,14 +294,10 @@ async fn execute_node(
                     output: cached.output,
                     token_cost: 0, // No cost for cached responses
                     cache_hit: true,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    rendered_prompt: Some(resolved_prompt),
                 });
-            }
-
-            // Substitute dependency outputs into prompt template
-            let mut resolved_prompt = prompt.clone();
-            for (dep_id, dep_output) in outputs {
-                let placeholder = format!("{{{{{}}}}}", dep_id);
-                resolved_prompt = resolved_prompt.replace(&placeholder, dep_output);
             }
 
             // Call LLM (real or mock based on feature flag and config)
@@ -281,7 +305,7 @@ async fn execute_node(
             let client = create_client(llm_config, &model);
 
             let request = LlmRequest {
-                prompt: resolved_prompt,
+                prompt: resolved_prompt.clone(),
                 model: model.clone(),
                 temperature: node.temperature,
                 max_tokens: node.max_tokens,
@@ -290,49 +314,80 @@ async fn execute_node(
 
             let llm_response = client.complete(request).await.map_err(|e| e.to_string())?;
 
-            let output = llm_response.content;
+            let output = llm_response.content.clone();
             let token_cost = llm_response.total_tokens;
 
             // Cache the result
-            let response = CachedResponse {
-                output: output.clone(),
+            let response = CachedResponse::new(
+                output.clone(),
                 token_cost,
-                cache_key: cache_key.hash(),
-                cached_at: current_timestamp(),
-            };
+                cache_key.hash(),
+            )
+            .with_tokens(llm_response.input_tokens, llm_response.output_tokens)
+            .with_model(&model, &llm_response.provider);
+
             cache.put(&cache_key, response);
 
             return Ok(InternalNodeResult {
                 output,
                 token_cost,
                 cache_hit: false,
+                input_tokens: llm_response.input_tokens,
+                output_tokens: llm_response.output_tokens,
+                rendered_prompt: Some(resolved_prompt),
             });
         }
     }
 
-    // Simulate regular function call
+    // Simulate regular function call (non-LLM nodes)
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
     Ok(InternalNodeResult {
         output: format!("Function {} executed", node.id),
         token_cost: 0,
         cache_hit: false,
+        input_tokens: 0,
+        output_tokens: 0,
+        rendered_prompt: None,
     })
 }
 
+/// Request body for /execute endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteRequest {
+    /// The DAG to execute
+    pub dag: Dag,
+    /// Optional execution context with variables
+    #[serde(default)]
+    pub context: Option<HashMap<String, serde_json::Value>>,
+}
+
 /// Execute a DAG with parallel execution of independent nodes
-#[instrument(skip(state))]
+#[instrument(skip(state, request))]
 async fn execute_dag(
     State(state): State<AppState>,
-    Json(dag): Json<Dag>,
+    Json(request): Json<ExecuteRequest>,
 ) -> Result<Json<DagExecutionResponse>, StatusCode> {
+    let dag = request.dag;
     let execution_id = Uuid::new_v4().to_string();
     let start_time = Instant::now();
 
-    info!(execution_id = %execution_id, node_count = dag.nodes.len(), "Starting DAG execution");
+    // Create execution context
+    let context = if let Some(vars) = request.context {
+        ExecutionContext::with_variables(&execution_id, vars)
+    } else {
+        ExecutionContext::new(&execution_id)
+    };
+
+    info!(
+        execution_id = %execution_id,
+        node_count = dag.nodes.len(),
+        context_vars = context.variables.len(),
+        "Starting DAG execution"
+    );
 
     // Get execution levels for parallel processing
-    let levels = match get_execution_levels(&dag) {
+    let level_info = match get_execution_levels(&dag) {
         Ok(l) => l,
         Err(e) => {
             state.metrics.errors.inc();
@@ -344,9 +399,23 @@ async fn execute_dag(
                 parallelization_factor: 0.0,
                 cache_hit_rate: 0.0,
                 errors: vec![e],
+                level_execution_times_ms: Vec::new(),
+                max_concurrency_used: 0,
+                node_execution_times_ms: HashMap::new(),
+                node_levels: HashMap::new(),
+                node_status: HashMap::new(),
+                aborted: true,
+                skipped_nodes: Vec::new(),
+                tokens_saved: 0,
             }));
         }
     };
+
+    // Determine error policy from DAG metadata
+    let error_policy = dag.nodes.first()
+        .and_then(|n| n.execution_hints.error_policy.as_ref())
+        .map(|s| ErrorPolicy::from_str(s))
+        .unwrap_or(ErrorPolicy::Fail);
 
     let mut results: Vec<ExecutionResult> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
@@ -355,12 +424,28 @@ async fn execute_dag(
     let mut total_cache_hits = 0u32;
     let mut total_cache_misses = 0u32;
     let mut max_parallel = 0usize;
+    let mut level_times: Vec<u64> = Vec::new();
+    let mut node_execution_times: HashMap<String, u64> = HashMap::new();
+    let mut node_status_map: HashMap<String, NodeStatus> = HashMap::new();
+    let mut skipped_nodes: Vec<String> = Vec::new();
+    let mut aborted = false;
+    let mut tokens_saved = 0u32;
 
     // Create a map from node_id to node for quick lookup
     let node_map: HashMap<&str, &DagNode> = dag.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
 
     // Execute level by level
-    for (level_idx, level_nodes) in levels.iter().enumerate() {
+    for (level_idx, level_nodes) in level_info.levels.iter().enumerate() {
+        // Check if we should abort
+        if aborted && error_policy == ErrorPolicy::Fail {
+            // Mark remaining nodes as skipped
+            for node_id in level_nodes {
+                node_status_map.insert(node_id.clone(), NodeStatus::skipped("Aborted due to previous failure"));
+                skipped_nodes.push(node_id.clone());
+            }
+            continue;
+        }
+
         let level_start = Instant::now();
         let parallel_count = level_nodes.len();
         max_parallel = max_parallel.max(parallel_count);
@@ -376,18 +461,37 @@ async fn execute_dag(
         let mut join_set = JoinSet::new();
 
         for node_id in level_nodes {
+            // Skip nodes whose dependencies failed (if Skip policy)
+            if error_policy == ErrorPolicy::Skip {
+                let deps_failed = node_map.get(node_id.as_str())
+                    .map(|n| n.dependencies.iter().any(|dep| {
+                        node_status_map.get(dep)
+                            .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
+                            .unwrap_or(false)
+                    }))
+                    .unwrap_or(false);
+
+                if deps_failed {
+                    node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
+                    skipped_nodes.push(node_id.clone());
+                    continue;
+                }
+            }
+
             if let Some(node) = node_map.get(node_id.as_str()) {
                 let node = (*node).clone();
                 let security = state.security.clone();
                 let cache = state.cache.clone();
                 let llm_config = state.llm_config.clone();
                 let current_outputs = outputs.clone();
+                let ctx = context.clone();
+                let level = level_idx;
 
                 join_set.spawn(async move {
                     let node_start = Instant::now();
-                    let result = execute_node(&node, &security, &cache, &llm_config, &current_outputs).await;
+                    let result = execute_node(&node, &security, &cache, &llm_config, &ctx, &current_outputs).await;
                     let execution_time_ms = node_start.elapsed().as_millis() as u64;
-                    (node.id.clone(), result, execution_time_ms)
+                    (node.id.clone(), result, execution_time_ms, level)
                 });
             }
         }
@@ -395,20 +499,16 @@ async fn execute_dag(
         // Collect results from this level
         while let Some(result) = join_set.join_next().await {
             match result {
-                Ok((node_id, Ok(node_result), execution_time_ms)) => {
+                Ok((node_id, Ok(node_result), execution_time_ms, level)) => {
                     state.metrics.executed_nodes.inc();
-                    state
-                        .metrics
-                        .token_cost
-                        .inc_by(node_result.token_cost as f64);
-                    state
-                        .metrics
-                        .execution_time
-                        .observe(execution_time_ms as f64 / 1000.0);
+                    state.metrics.token_cost.inc_by(node_result.token_cost as f64);
+                    state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
 
                     if node_result.cache_hit {
                         state.metrics.cache_hits.inc();
                         total_cache_hits += 1;
+                        // Track tokens saved (from original cached response)
+                        tokens_saved += node_result.input_tokens + node_result.output_tokens;
                     } else {
                         state.metrics.cache_misses.inc();
                         total_cache_misses += 1;
@@ -416,6 +516,8 @@ async fn execute_dag(
 
                     total_token_cost += node_result.token_cost;
                     outputs.insert(node_id.clone(), node_result.output.clone());
+                    node_execution_times.insert(node_id.clone(), execution_time_ms);
+                    node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
 
                     results.push(ExecutionResult {
                         node_id,
@@ -423,22 +525,38 @@ async fn execute_dag(
                         execution_time_ms,
                         token_cost: node_result.token_cost,
                         cache_hit: node_result.cache_hit,
+                        rendered_prompt: node_result.rendered_prompt,
+                        input_tokens: node_result.input_tokens,
+                        output_tokens: node_result.output_tokens,
+                        level,
                     });
                 }
-                Ok((node_id, Err(e), _)) => {
+                Ok((node_id, Err(e), _, _)) => {
                     state.metrics.errors.inc();
                     errors.push(format!("Node {}: {}", node_id, e));
+                    node_status_map.insert(node_id.clone(), NodeStatus::failed(&e));
+                    node_execution_times.insert(node_id.clone(), 0);
+
+                    if error_policy == ErrorPolicy::Fail {
+                        aborted = true;
+                    }
                 }
                 Err(e) => {
                     state.metrics.errors.inc();
                     errors.push(format!("Task join error: {}", e));
+                    if error_policy == ErrorPolicy::Fail {
+                        aborted = true;
+                    }
                 }
             }
         }
 
+        let level_time = level_start.elapsed().as_millis() as u64;
+        level_times.push(level_time);
+
         info!(
             level = level_idx,
-            level_time_ms = level_start.elapsed().as_millis(),
+            level_time_ms = level_time,
             "Level completed"
         );
     }
@@ -468,6 +586,8 @@ async fn execute_dag(
         errors_count = errors.len(),
         parallelization_factor,
         cache_hit_rate,
+        tokens_saved,
+        aborted,
         "DAG execution completed"
     );
 
@@ -479,6 +599,14 @@ async fn execute_dag(
         parallelization_factor,
         cache_hit_rate,
         errors,
+        level_execution_times_ms: level_times,
+        max_concurrency_used: max_parallel as u32,
+        node_execution_times_ms: node_execution_times,
+        node_levels: level_info.node_levels,
+        node_status: node_status_map,
+        aborted,
+        skipped_nodes,
+        tokens_saved,
     }))
 }
 
@@ -589,131 +717,136 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aether_core::DagNode;
+
+    fn make_test_node(id: &str, deps: Vec<&str>) -> DagNode {
+        DagNode {
+            id: id.to_string(),
+            node_type: DagNodeType::Compute,
+            name: Some(id.to_string()),
+            prompt_template: None,
+            prompt: None,
+            template_refs: Vec::new(),
+            model: None,
+            temperature: None,
+            max_tokens: None,
+            system_prompt: None,
+            dependencies: deps.into_iter().map(|s| s.to_string()).collect(),
+            cache_key_inputs: Vec::new(),
+            render_policy: Default::default(),
+            execution_hints: Default::default(),
+            return_type: None,
+            source_location: None,
+        }
+    }
 
     #[test]
     fn test_build_dependency_graph() {
-        let dag = Dag {
-            nodes: vec![
-                DagNode {
-                    id: "a".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec![],
-                },
-                DagNode {
-                    id: "b".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec!["a".to_string()],
-                },
-                DagNode {
-                    id: "c".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec!["a".to_string()],
-                },
-                DagNode {
-                    id: "d".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec!["b".to_string(), "c".to_string()],
-                },
-            ],
-        };
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["a"]),
+            make_test_node("d", vec!["b", "c"]),
+        ]);
 
-        let levels = get_execution_levels(&dag).unwrap();
+        let level_info = get_execution_levels(&dag).unwrap();
 
         // Level 0: a (no deps)
         // Level 1: b, c (depend on a)
         // Level 2: d (depends on b and c)
-        assert_eq!(levels.len(), 3);
-        assert_eq!(levels[0], vec!["a"]);
-        assert!(levels[1].contains(&"b".to_string()));
-        assert!(levels[1].contains(&"c".to_string()));
-        assert_eq!(levels[2], vec!["d"]);
+        assert_eq!(level_info.levels.len(), 3);
+        assert_eq!(level_info.levels[0], vec!["a"]);
+        assert!(level_info.levels[1].contains(&"b".to_string()));
+        assert!(level_info.levels[1].contains(&"c".to_string()));
+        assert_eq!(level_info.levels[2], vec!["d"]);
+
+        // Check node_levels mapping
+        assert_eq!(level_info.node_levels.get("a"), Some(&0));
+        assert_eq!(level_info.node_levels.get("b"), Some(&1));
+        assert_eq!(level_info.node_levels.get("c"), Some(&1));
+        assert_eq!(level_info.node_levels.get("d"), Some(&2));
     }
 
     #[test]
     fn test_cycle_detection() {
-        let dag = Dag {
-            nodes: vec![
-                DagNode {
-                    id: "a".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec!["b".to_string()],
-                },
-                DagNode {
-                    id: "b".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec!["a".to_string()],
-                },
-            ],
-        };
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec!["b"]),
+            make_test_node("b", vec!["a"]),
+        ]);
 
         let result = get_execution_levels(&dag);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Cycle"));
+        let err = result.unwrap_err();
+        assert!(err.contains("Cycle"), "Expected cycle error, got: {}", err);
+    }
+
+    #[test]
+    fn test_cycle_detection_three_nodes() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec!["c"]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["b"]),
+        ]);
+
+        let result = get_execution_levels(&dag);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cycle"), "Expected cycle error, got: {}", err);
     }
 
     #[test]
     fn test_parallel_independent_nodes() {
-        let dag = Dag {
-            nodes: vec![
-                DagNode {
-                    id: "a".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec![],
-                },
-                DagNode {
-                    id: "b".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec![],
-                },
-                DagNode {
-                    id: "c".to_string(),
-                    node_type: "fn".to_string(),
-                    prompt: None,
-                    model: None,
-                    temperature: None,
-                    max_tokens: None,
-                    dependencies: vec![],
-                },
-            ],
-        };
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec![]),
+            make_test_node("c", vec![]),
+        ]);
 
-        let levels = get_execution_levels(&dag).unwrap();
+        let level_info = get_execution_levels(&dag).unwrap();
 
         // All nodes are independent, should be in level 0
-        assert_eq!(levels.len(), 1);
-        assert_eq!(levels[0].len(), 3);
+        assert_eq!(level_info.levels.len(), 1);
+        assert_eq!(level_info.levels[0].len(), 3);
+    }
+
+    #[test]
+    fn test_complex_dag_levels() {
+        // Diamond pattern: a -> b, c -> d (plus e independent)
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["a"]),
+            make_test_node("d", vec!["b", "c"]),
+            make_test_node("e", vec![]),  // Independent of the diamond
+        ]);
+
+        let level_info = get_execution_levels(&dag).unwrap();
+
+        assert_eq!(level_info.levels.len(), 3);
+        // Level 0: a and e (both independent)
+        assert!(level_info.levels[0].contains(&"a".to_string()));
+        assert!(level_info.levels[0].contains(&"e".to_string()));
+        // Level 1: b and c (depend on a)
+        assert!(level_info.levels[1].contains(&"b".to_string()));
+        assert!(level_info.levels[1].contains(&"c".to_string()));
+        // Level 2: d (depends on b and c)
+        assert!(level_info.levels[2].contains(&"d".to_string()));
+    }
+
+    #[test]
+    fn test_empty_dag() {
+        let dag = Dag::with_nodes(vec![]);
+        let level_info = get_execution_levels(&dag).unwrap();
+        assert!(level_info.levels.is_empty());
+        assert!(level_info.node_levels.is_empty());
+    }
+
+    #[test]
+    fn test_single_node_dag() {
+        let dag = Dag::with_nodes(vec![make_test_node("only", vec![])]);
+        let level_info = get_execution_levels(&dag).unwrap();
+        assert_eq!(level_info.levels.len(), 1);
+        assert_eq!(level_info.levels[0], vec!["only".to_string()]);
     }
 }
 

@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "test_context_flow",
+    "source_file": "test_dag_context.aether",
+    "compiler_version": "0.1.0",
+    "inputs": [
+      {"name": "user_name", "type": "String", "required": true},
+      {"name": "topic", "type": "String", "required": true}
+    ],
+    "output_type": "String"
+  },
+  "nodes": [
+    {
+      "id": "generate_greeting",
+      "node_type": "llm_fn",
+      "name": "generate_greeting",
+      "prompt_template": "Generate a friendly greeting for {{context.user_name}} about {{context.topic}}.",
+      "template_refs": [
+        {
+          "raw": "{{context.user_name}}",
+          "kind": "context",
+          "path": ["user_name"],
+          "required": true,
+          "sensitivity": "low"
+        },
+        {
+          "raw": "{{context.topic}}",
+          "kind": "context",
+          "path": ["topic"],
+          "required": true,
+          "sensitivity": "low"
+        }
+      ],
+      "model": "gpt-4o-mini",
+      "temperature": 0.7,
+      "max_tokens": 100,
+      "dependencies": []
+    },
+    {
+      "id": "analyze_greeting",
+      "node_type": "llm_fn",
+      "name": "analyze_greeting",
+      "prompt_template": "Analyze the tone of this greeting: {{node.generate_greeting.output}}",
+      "template_refs": [
+        {
+          "raw": "{{node.generate_greeting.output}}",
+          "kind": "node_output",
+          "path": [],
+          "node_id": "generate_greeting",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low"
+        }
+      ],
+      "model": "gpt-4o-mini",
+      "temperature": 0.3,
+      "max_tokens": 150,
+      "dependencies": ["generate_greeting"]
+    },
+    {
+      "id": "format_response",
+      "node_type": "llm_fn",
+      "name": "format_response",
+      "prompt_template": "Format this for {{context.user_name}}:\n\nGreeting: {{node.generate_greeting.output}}\n\nAnalysis: {{node.analyze_greeting.output}}",
+      "template_refs": [
+        {
+          "raw": "{{context.user_name}}",
+          "kind": "context",
+          "path": ["user_name"],
+          "required": true,
+          "sensitivity": "low"
+        },
+        {
+          "raw": "{{node.generate_greeting.output}}",
+          "kind": "node_output",
+          "path": [],
+          "node_id": "generate_greeting",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low"
+        },
+        {
+          "raw": "{{node.analyze_greeting.output}}",
+          "kind": "node_output",
+          "path": [],
+          "node_id": "analyze_greeting",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low"
+        }
+      ],
+      "model": "gpt-4o-mini",
+      "temperature": 0.5,
+      "max_tokens": 200,
+      "dependencies": ["generate_greeting", "analyze_greeting"]
+    }
+  ]
+}

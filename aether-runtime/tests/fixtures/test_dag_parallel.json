@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "parallel_speedup_test",
+    "source_file": "test_dag_parallel.aether",
+    "compiler_version": "0.1.0",
+    "inputs": [],
+    "output_type": "String"
+  },
+  "nodes": [
+    {
+      "id": "parallel_1",
+      "node_type": "llm_fn",
+      "name": "parallel_task_1",
+      "prompt_template": "Generate a random fact about cats.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.8,
+      "max_tokens": 50,
+      "dependencies": []
+    },
+    {
+      "id": "parallel_2",
+      "node_type": "llm_fn",
+      "name": "parallel_task_2",
+      "prompt_template": "Generate a random fact about dogs.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.8,
+      "max_tokens": 50,
+      "dependencies": []
+    },
+    {
+      "id": "parallel_3",
+      "node_type": "llm_fn",
+      "name": "parallel_task_3",
+      "prompt_template": "Generate a random fact about birds.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.8,
+      "max_tokens": 50,
+      "dependencies": []
+    },
+    {
+      "id": "parallel_4",
+      "node_type": "llm_fn",
+      "name": "parallel_task_4",
+      "prompt_template": "Generate a random fact about fish.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.8,
+      "max_tokens": 50,
+      "dependencies": []
+    },
+    {
+      "id": "parallel_5",
+      "node_type": "llm_fn",
+      "name": "parallel_task_5",
+      "prompt_template": "Generate a random fact about horses.",
+      "template_refs": [],
+      "model": "gpt-4o-mini",
+      "temperature": 0.8,
+      "max_tokens": 50,
+      "dependencies": []
+    },
+    {
+      "id": "join_node",
+      "node_type": "llm_fn",
+      "name": "combine_facts",
+      "prompt_template": "Combine these animal facts into a summary:\n1. {{node.parallel_1.output}}\n2. {{node.parallel_2.output}}\n3. {{node.parallel_3.output}}\n4. {{node.parallel_4.output}}\n5. {{node.parallel_5.output}}",
+      "template_refs": [
+        {"raw": "{{node.parallel_1.output}}", "kind": "node_output", "node_id": "parallel_1", "field": "output", "required": true, "sensitivity": "low", "path": []},
+        {"raw": "{{node.parallel_2.output}}", "kind": "node_output", "node_id": "parallel_2", "field": "output", "required": true, "sensitivity": "low", "path": []},
+        {"raw": "{{node.parallel_3.output}}", "kind": "node_output", "node_id": "parallel_3", "field": "output", "required": true, "sensitivity": "low", "path": []},
+        {"raw": "{{node.parallel_4.output}}", "kind": "node_output", "node_id": "parallel_4", "field": "output", "required": true, "sensitivity": "low", "path": []},
+        {"raw": "{{node.parallel_5.output}}", "kind": "node_output", "node_id": "parallel_5", "field": "output", "required": true, "sensitivity": "low", "path": []}
+      ],
+      "model": "gpt-4o-mini",
+      "temperature": 0.5,
+      "max_tokens": 200,
+      "dependencies": ["parallel_1", "parallel_2", "parallel_3", "parallel_4", "parallel_5"]
+    }
+  ]
+}

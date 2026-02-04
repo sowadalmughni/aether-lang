@@ -594,6 +594,36 @@ pub struct DagExecutionResponse {
     /// Total tokens saved by cache hits
     #[serde(default)]
     pub tokens_saved: u32,
+
+    // === Latency percentiles (computed server-side for accuracy) ===
+
+    /// Node latency p50 in milliseconds (across all executed nodes)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_latency_p50_ms: Option<u64>,
+
+    /// Node latency p95 in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_latency_p95_ms: Option<u64>,
+
+    /// Node latency p99 in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_latency_p99_ms: Option<u64>,
+
+    /// Level latency p50 in milliseconds (across all execution levels)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_latency_p50_ms: Option<u64>,
+
+    /// Level latency p95 in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_latency_p95_ms: Option<u64>,
+
+    /// Level latency p99 in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_latency_p99_ms: Option<u64>,
+
+    /// Whether this execution ran in sequential mode (max_concurrency=1)
+    #[serde(default)]
+    pub sequential_mode: bool,
 }
 
 // =============================================================================

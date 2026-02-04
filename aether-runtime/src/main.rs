@@ -43,6 +43,48 @@ use security::{DefaultInputSanitizer, SecurityConfig, SecurityError, SecurityMid
 use template::{render_node_prompt, RenderOptions};
 
 // =============================================================================
+// Percentile Computation
+// =============================================================================
+
+/// Percentile results for latency measurements
+#[derive(Debug, Clone, Default)]
+pub struct LatencyPercentiles {
+    pub p50: Option<u64>,
+    pub p95: Option<u64>,
+    pub p99: Option<u64>,
+}
+
+/// Compute p50, p95, p99 percentiles from a vector of samples.
+///
+/// Uses the floor-based index method:
+/// - p50 index = floor(0.50 * (n - 1))
+/// - p95 index = floor(0.95 * (n - 1))
+/// - p99 index = floor(0.99 * (n - 1))
+///
+/// Returns None for each percentile if the samples vector is empty.
+pub fn compute_percentiles(samples: &[u64]) -> LatencyPercentiles {
+    if samples.is_empty() {
+        return LatencyPercentiles::default();
+    }
+
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+
+    let n = sorted.len();
+
+    // Compute indices using floor method
+    let p50_idx = ((0.50 * (n - 1) as f64).floor()) as usize;
+    let p95_idx = ((0.95 * (n - 1) as f64).floor()) as usize;
+    let p99_idx = ((0.99 * (n - 1) as f64).floor()) as usize;
+
+    LatencyPercentiles {
+        p50: Some(sorted[p50_idx]),
+        p95: Some(sorted[p95_idx]),
+        p99: Some(sorted[p99_idx]),
+    }
+}
+
+// =============================================================================
 // Data Structures (re-export from aether-core and add runtime-specific types)
 // =============================================================================
 
@@ -362,15 +404,25 @@ pub struct ExecuteRequest {
     pub context: Option<HashMap<String, serde_json::Value>>,
 }
 
+/// Query parameters for /execute endpoint
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ExecuteQueryParams {
+    /// If true, force sequential execution (max_concurrency=1)
+    #[serde(default)]
+    pub sequential: bool,
+}
+
 /// Execute a DAG with parallel execution of independent nodes
-#[instrument(skip(state, request))]
+#[instrument(skip(state, request, query))]
 async fn execute_dag(
     State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<ExecuteQueryParams>,
     Json(request): Json<ExecuteRequest>,
 ) -> Result<Json<DagExecutionResponse>, StatusCode> {
     let dag = request.dag;
     let execution_id = Uuid::new_v4().to_string();
     let start_time = Instant::now();
+    let sequential_mode = query.sequential;
 
     // Create execution context
     let context = if let Some(vars) = request.context {
@@ -383,6 +435,7 @@ async fn execute_dag(
         execution_id = %execution_id,
         node_count = dag.nodes.len(),
         context_vars = context.variables.len(),
+        sequential_mode = sequential_mode,
         "Starting DAG execution"
     );
 
@@ -407,6 +460,13 @@ async fn execute_dag(
                 aborted: true,
                 skipped_nodes: Vec::new(),
                 tokens_saved: 0,
+                node_latency_p50_ms: None,
+                node_latency_p95_ms: None,
+                node_latency_p99_ms: None,
+                level_latency_p50_ms: None,
+                level_latency_p95_ms: None,
+                level_latency_p99_ms: None,
+                sequential_mode,
             }));
         }
     };
@@ -448,76 +508,150 @@ async fn execute_dag(
 
         let level_start = Instant::now();
         let parallel_count = level_nodes.len();
-        max_parallel = max_parallel.max(parallel_count);
+        // In sequential mode, max_parallel is always 1 (except for the first level with 0 nodes)
+        let effective_parallel = if sequential_mode { 1.min(parallel_count) } else { parallel_count };
+        max_parallel = max_parallel.max(effective_parallel);
 
-        state.metrics.parallel_nodes.set(parallel_count as f64);
+        state.metrics.parallel_nodes.set(effective_parallel as f64);
 
-        let span = span!(Level::INFO, "execute_level", level = level_idx, nodes = parallel_count);
+        let span = span!(Level::INFO, "execute_level", level = level_idx, nodes = parallel_count, sequential = sequential_mode);
         let _enter = span.enter();
 
-        info!(level = level_idx, parallel_nodes = parallel_count, "Executing level");
+        info!(level = level_idx, parallel_nodes = parallel_count, sequential_mode = sequential_mode, "Executing level");
 
-        // Execute all nodes in this level in parallel
-        let mut join_set = JoinSet::new();
+        if sequential_mode {
+            // Sequential execution: run nodes one at a time
+            for node_id in level_nodes {
+                // Skip nodes whose dependencies failed (if Skip policy)
+                if error_policy == ErrorPolicy::Skip {
+                    let deps_failed = node_map.get(node_id.as_str())
+                        .map(|n| n.dependencies.iter().any(|dep| {
+                            node_status_map.get(dep)
+                                .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
+                                .unwrap_or(false)
+                        }))
+                        .unwrap_or(false);
 
-        for node_id in level_nodes {
-            // Skip nodes whose dependencies failed (if Skip policy)
-            if error_policy == ErrorPolicy::Skip {
-                let deps_failed = node_map.get(node_id.as_str())
-                    .map(|n| n.dependencies.iter().any(|dep| {
-                        node_status_map.get(dep)
-                            .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
-                            .unwrap_or(false)
-                    }))
-                    .unwrap_or(false);
+                    if deps_failed {
+                        node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
+                        skipped_nodes.push(node_id.clone());
+                        continue;
+                    }
+                }
 
-                if deps_failed {
-                    node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
-                    skipped_nodes.push(node_id.clone());
-                    continue;
+                if let Some(node) = node_map.get(node_id.as_str()) {
+                    let node_start = Instant::now();
+                    let result = execute_node(node, &state.security, &state.cache, &state.llm_config, &context, &outputs).await;
+                    let execution_time_ms = node_start.elapsed().as_millis() as u64;
+
+                    match result {
+                        Ok(node_result) => {
+                            state.metrics.executed_nodes.inc();
+                            state.metrics.token_cost.inc_by(node_result.token_cost as f64);
+                            state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
+
+                            if node_result.cache_hit {
+                                state.metrics.cache_hits.inc();
+                                total_cache_hits += 1;
+                                tokens_saved += node_result.input_tokens + node_result.output_tokens;
+                            } else {
+                                state.metrics.cache_misses.inc();
+                                total_cache_misses += 1;
+                            }
+
+                            total_token_cost += node_result.token_cost;
+                            outputs.insert(node_id.clone(), node_result.output.clone());
+                            node_execution_times.insert(node_id.clone(), execution_time_ms);
+                            node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
+
+                            results.push(ExecutionResult {
+                                node_id: node_id.clone(),
+                                output: node_result.output,
+                                execution_time_ms,
+                                token_cost: node_result.token_cost,
+                                cache_hit: node_result.cache_hit,
+                                rendered_prompt: node_result.rendered_prompt,
+                                input_tokens: node_result.input_tokens,
+                                output_tokens: node_result.output_tokens,
+                                level: level_idx,
+                            });
+                        }
+                        Err(e) => {
+                            state.metrics.errors.inc();
+                            errors.push(format!("Node {}: {}", node_id, e));
+                            node_status_map.insert(node_id.clone(), NodeStatus::failed(&e));
+                            node_execution_times.insert(node_id.clone(), 0);
+
+                            if error_policy == ErrorPolicy::Fail {
+                                aborted = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Parallel execution: spawn all nodes in this level
+            let mut join_set = JoinSet::new();
+
+            for node_id in level_nodes {
+                // Skip nodes whose dependencies failed (if Skip policy)
+                if error_policy == ErrorPolicy::Skip {
+                    let deps_failed = node_map.get(node_id.as_str())
+                        .map(|n| n.dependencies.iter().any(|dep| {
+                            node_status_map.get(dep)
+                                .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
+                                .unwrap_or(false)
+                        }))
+                        .unwrap_or(false);
+
+                    if deps_failed {
+                        node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
+                        skipped_nodes.push(node_id.clone());
+                        continue;
+                    }
+                }
+
+                if let Some(node) = node_map.get(node_id.as_str()) {
+                    let node = (*node).clone();
+                    let security = state.security.clone();
+                    let cache = state.cache.clone();
+                    let llm_config = state.llm_config.clone();
+                    let current_outputs = outputs.clone();
+                    let ctx = context.clone();
+                    let level = level_idx;
+
+                    join_set.spawn(async move {
+                        let node_start = Instant::now();
+                        let result = execute_node(&node, &security, &cache, &llm_config, &ctx, &current_outputs).await;
+                        let execution_time_ms = node_start.elapsed().as_millis() as u64;
+                        (node.id.clone(), result, execution_time_ms, level)
+                    });
                 }
             }
 
-            if let Some(node) = node_map.get(node_id.as_str()) {
-                let node = (*node).clone();
-                let security = state.security.clone();
-                let cache = state.cache.clone();
-                let llm_config = state.llm_config.clone();
-                let current_outputs = outputs.clone();
-                let ctx = context.clone();
-                let level = level_idx;
+            // Collect results from this level
+            while let Some(result) = join_set.join_next().await {
+                match result {
+                    Ok((node_id, Ok(node_result), execution_time_ms, level)) => {
+                        state.metrics.executed_nodes.inc();
+                        state.metrics.token_cost.inc_by(node_result.token_cost as f64);
+                        state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
 
-                join_set.spawn(async move {
-                    let node_start = Instant::now();
-                    let result = execute_node(&node, &security, &cache, &llm_config, &ctx, &current_outputs).await;
-                    let execution_time_ms = node_start.elapsed().as_millis() as u64;
-                    (node.id.clone(), result, execution_time_ms, level)
-                });
-            }
-        }
+                        if node_result.cache_hit {
+                            state.metrics.cache_hits.inc();
+                            total_cache_hits += 1;
+                            // Track tokens saved (from original cached response)
+                            tokens_saved += node_result.input_tokens + node_result.output_tokens;
+                        } else {
+                            state.metrics.cache_misses.inc();
+                            total_cache_misses += 1;
+                        }
 
-        // Collect results from this level
-        while let Some(result) = join_set.join_next().await {
-            match result {
-                Ok((node_id, Ok(node_result), execution_time_ms, level)) => {
-                    state.metrics.executed_nodes.inc();
-                    state.metrics.token_cost.inc_by(node_result.token_cost as f64);
-                    state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
-
-                    if node_result.cache_hit {
-                        state.metrics.cache_hits.inc();
-                        total_cache_hits += 1;
-                        // Track tokens saved (from original cached response)
-                        tokens_saved += node_result.input_tokens + node_result.output_tokens;
-                    } else {
-                        state.metrics.cache_misses.inc();
-                        total_cache_misses += 1;
-                    }
-
-                    total_token_cost += node_result.token_cost;
-                    outputs.insert(node_id.clone(), node_result.output.clone());
-                    node_execution_times.insert(node_id.clone(), execution_time_ms);
-                    node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
+                        total_token_cost += node_result.token_cost;
+                        outputs.insert(node_id.clone(), node_result.output.clone());
+                        node_execution_times.insert(node_id.clone(), execution_time_ms);
+                        node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
 
                     results.push(ExecutionResult {
                         node_id,
@@ -550,6 +684,7 @@ async fn execute_dag(
                 }
             }
         }
+        } // end else (parallel execution)
 
         let level_time = level_start.elapsed().as_millis() as u64;
         level_times.push(level_time);
@@ -578,6 +713,25 @@ async fn execute_dag(
         total_cache_hits as f64 / total_cache_ops as f64
     };
 
+    // Compute latency percentiles
+    // Collect node latencies (only for succeeded/failed nodes, exclude skipped)
+    let node_latency_samples: Vec<u64> = node_execution_times
+        .iter()
+        .filter(|(node_id, _)| {
+            node_status_map
+                .get(*node_id)
+                .map(|s| matches!(s.state, NodeState::Succeeded | NodeState::Failed))
+                .unwrap_or(false)
+        })
+        .map(|(_, &time)| time)
+        .collect();
+
+    let node_percentiles = compute_percentiles(&node_latency_samples);
+
+    // Collect level latencies (exclude empty levels)
+    let level_latency_samples: Vec<u64> = level_times.iter().copied().collect();
+    let level_percentiles = compute_percentiles(&level_latency_samples);
+
     info!(
         execution_id = %execution_id,
         total_execution_time_ms,
@@ -588,6 +742,10 @@ async fn execute_dag(
         cache_hit_rate,
         tokens_saved,
         aborted,
+        sequential_mode,
+        node_latency_p50 = ?node_percentiles.p50,
+        node_latency_p95 = ?node_percentiles.p95,
+        node_latency_p99 = ?node_percentiles.p99,
         "DAG execution completed"
     );
 
@@ -607,6 +765,13 @@ async fn execute_dag(
         aborted,
         skipped_nodes,
         tokens_saved,
+        node_latency_p50_ms: node_percentiles.p50,
+        node_latency_p95_ms: node_percentiles.p95,
+        node_latency_p99_ms: node_percentiles.p99,
+        level_latency_p50_ms: level_percentiles.p50,
+        level_latency_p95_ms: level_percentiles.p95,
+        level_latency_p99_ms: level_percentiles.p99,
+        sequential_mode,
     }))
 }
 
@@ -847,6 +1012,87 @@ mod tests {
         let level_info = get_execution_levels(&dag).unwrap();
         assert_eq!(level_info.levels.len(), 1);
         assert_eq!(level_info.levels[0], vec!["only".to_string()]);
+    }
+
+    // =========================================================================
+    // Percentile Computation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_percentiles_empty_samples() {
+        let percentiles = compute_percentiles(&[]);
+        assert!(percentiles.p50.is_none());
+        assert!(percentiles.p95.is_none());
+        assert!(percentiles.p99.is_none());
+    }
+
+    #[test]
+    fn test_percentiles_single_sample() {
+        let percentiles = compute_percentiles(&[100]);
+        assert_eq!(percentiles.p50, Some(100));
+        assert_eq!(percentiles.p95, Some(100));
+        assert_eq!(percentiles.p99, Some(100));
+    }
+
+    #[test]
+    fn test_percentiles_two_samples() {
+        let percentiles = compute_percentiles(&[10, 20]);
+        // n=2, p50_idx = floor(0.50 * 1) = 0, p95_idx = floor(0.95 * 1) = 0, p99_idx = floor(0.99 * 1) = 0
+        assert_eq!(percentiles.p50, Some(10));
+        assert_eq!(percentiles.p95, Some(10));
+        assert_eq!(percentiles.p99, Some(10));
+    }
+
+    #[test]
+    fn test_percentiles_ten_samples() {
+        // 10 samples: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let samples: Vec<u64> = (1..=10).collect();
+        let percentiles = compute_percentiles(&samples);
+        // n=10, indices:
+        // p50_idx = floor(0.50 * 9) = floor(4.5) = 4 -> samples[4] = 5
+        // p95_idx = floor(0.95 * 9) = floor(8.55) = 8 -> samples[8] = 9
+        // p99_idx = floor(0.99 * 9) = floor(8.91) = 8 -> samples[8] = 9
+        assert_eq!(percentiles.p50, Some(5));
+        assert_eq!(percentiles.p95, Some(9));
+        assert_eq!(percentiles.p99, Some(9));
+    }
+
+    #[test]
+    fn test_percentiles_hundred_samples() {
+        // 100 samples: [1, 2, 3, ..., 100]
+        let samples: Vec<u64> = (1..=100).collect();
+        let percentiles = compute_percentiles(&samples);
+        // n=100, indices:
+        // p50_idx = floor(0.50 * 99) = floor(49.5) = 49 -> samples[49] = 50
+        // p95_idx = floor(0.95 * 99) = floor(94.05) = 94 -> samples[94] = 95
+        // p99_idx = floor(0.99 * 99) = floor(98.01) = 98 -> samples[98] = 99
+        assert_eq!(percentiles.p50, Some(50));
+        assert_eq!(percentiles.p95, Some(95));
+        assert_eq!(percentiles.p99, Some(99));
+    }
+
+    #[test]
+    fn test_percentiles_unsorted_input() {
+        // Unsorted input should still work
+        let samples = vec![50, 10, 90, 30, 70, 20, 80, 40, 60, 100];
+        let percentiles = compute_percentiles(&samples);
+        // After sorting: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        // n=10, p50_idx = floor(0.50 * 9) = 4 -> 50
+        assert_eq!(percentiles.p50, Some(50));
+        assert_eq!(percentiles.p95, Some(90));
+        assert_eq!(percentiles.p99, Some(90));
+    }
+
+    #[test]
+    fn test_percentiles_with_duplicates() {
+        let samples = vec![100, 100, 100, 100, 100, 200, 200, 200, 200, 200];
+        let percentiles = compute_percentiles(&samples);
+        // After sorting: [100, 100, 100, 100, 100, 200, 200, 200, 200, 200]
+        // n=10, p50_idx = 4 -> 100
+        assert_eq!(percentiles.p50, Some(100));
+        // p95_idx = 8 -> 200
+        assert_eq!(percentiles.p95, Some(200));
+        assert_eq!(percentiles.p99, Some(200));
     }
 }
 

@@ -458,12 +458,35 @@ impl<'src> Parser<'src> {
 
         while !self.check(TokenKind::RBrace) && !self.is_at_end() {
             let name_tok = self.expect(TokenKind::Ident)?;
-            let span = Span::from_range(name_tok.span.clone());
+            let name_span = Span::from_range(name_tok.span.clone());
+            let name = Spanned::new(name_tok.text.to_string(), name_span.clone());
 
-            variants.push(EnumVariant {
-                name: Spanned::new(name_tok.text.to_string(), span.clone()),
-                span,
-            });
+            // Check for associated data: Variant(Type) or Variant(Type1, Type2)
+            let (data, end_pos) = if self.check(TokenKind::LParen) {
+                self.advance();
+                let mut types = Vec::new();
+
+                if !self.check(TokenKind::RParen) {
+                    types.push(self.parse_type()?);
+
+                    while self.check(TokenKind::Comma) {
+                        self.advance();
+                        if self.check(TokenKind::RParen) {
+                            break; // trailing comma
+                        }
+                        types.push(self.parse_type()?);
+                    }
+                }
+
+                let rparen = self.expect(TokenKind::RParen)?;
+                (Some(types), rparen.span.end)
+            } else {
+                (None, name_span.end)
+            };
+
+            let span = Span::new(name_span.start, end_pos);
+
+            variants.push(EnumVariant { name, data, span });
 
             // Optional comma
             self.check_and_consume(TokenKind::Comma);
@@ -1731,8 +1754,54 @@ mod tests {
             assert_eq!(e.name.node, "Sentiment");
             assert_eq!(e.variants.len(), 3);
             assert_eq!(e.variants[0].name.node, "Positive");
+            assert!(e.variants[0].data.is_none());
             assert_eq!(e.variants[1].name.node, "Neutral");
             assert_eq!(e.variants[2].name.node, "Negative");
+        } else {
+            panic!("Expected enum");
+        }
+    }
+
+    #[test]
+    fn test_parse_enum_with_associated_data() {
+        let source = r#"
+            enum Result {
+                Success,
+                Error(string),
+                Data(int, string)
+            }
+        "#;
+        let program = parse(source).unwrap();
+
+        if let Item::Enum(e) = &program.items[0] {
+            assert_eq!(e.name.node, "Result");
+            assert_eq!(e.variants.len(), 3);
+
+            // Success - no data
+            assert_eq!(e.variants[0].name.node, "Success");
+            assert!(e.variants[0].data.is_none());
+
+            // Error(string) - single type
+            assert_eq!(e.variants[1].name.node, "Error");
+            let error_data = e.variants[1].data.as_ref().unwrap();
+            assert_eq!(error_data.len(), 1);
+            assert!(matches!(
+                &error_data[0],
+                Type::Primitive { kind: PrimitiveType::String, .. }
+            ));
+
+            // Data(int, string) - tuple types
+            assert_eq!(e.variants[2].name.node, "Data");
+            let data_types = e.variants[2].data.as_ref().unwrap();
+            assert_eq!(data_types.len(), 2);
+            assert!(matches!(
+                &data_types[0],
+                Type::Primitive { kind: PrimitiveType::Int, .. }
+            ));
+            assert!(matches!(
+                &data_types[1],
+                Type::Primitive { kind: PrimitiveType::String, .. }
+            ));
         } else {
             panic!("Expected enum");
         }

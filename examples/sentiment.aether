@@ -3,6 +3,7 @@
 // Demonstrates:
 // - Enum types for categorical outputs
 // - LLM function with structured output
+// - Simple flow with single LLM call
 // - Test blocks for validation
 
 enum Sentiment {
@@ -19,6 +20,13 @@ llm fn classify_sentiment(text: string) -> Sentiment {
 Text: {{text}}
 
 Respond with only the sentiment classification: Positive, Neutral, or Negative."
+}
+
+// Simple flow that wraps the LLM function
+// This is the minimal compilable unit that produces a DAG
+flow analyze_sentiment(input: string) -> Sentiment {
+    let result = classify_sentiment(input);
+    return result;
 }
 
 // Test block for validating the classifier

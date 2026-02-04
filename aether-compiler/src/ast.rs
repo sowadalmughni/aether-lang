@@ -236,10 +236,20 @@ pub struct EnumDef {
     pub span: Span,
 }
 
-/// Enum variant (may have associated data in the future)
+/// Enum variant (may have associated data)
+///
+/// ```aether
+/// enum Result {
+///     Success,           // Simple variant
+///     Error(string),     // Variant with single type
+///     Data(int, string)  // Variant with tuple types (future)
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnumVariant {
     pub name: Spanned<String>,
+    /// Associated data types (if any)
+    pub data: Option<Vec<Type>>,
     pub span: Span,
 }
 
@@ -701,10 +711,12 @@ mod tests {
             variants: vec![
                 EnumVariant {
                     name: Spanned::new("Positive".to_string(), Span::new(17, 25)),
+                    data: None,
                     span: Span::new(17, 25),
                 },
                 EnumVariant {
                     name: Spanned::new("Negative".to_string(), Span::new(27, 35)),
+                    data: None,
                     span: Span::new(27, 35),
                 },
             ],

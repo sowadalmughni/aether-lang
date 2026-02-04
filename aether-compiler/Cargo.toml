@@ -6,9 +6,19 @@ authors.workspace = true
 license.workspace = true
 description = "Compiler for the Aether programming language - type-safe LLM orchestration"
 
+[[bin]]
+name = "aetherc"
+path = "src/main.rs"
+
 [dependencies]
+# Internal crates
+aether-core = { workspace = true }
+
 # Lexer
 logos = "0.14"
+
+# CLI
+clap = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
@@ -20,6 +30,7 @@ miette = { version = "7.0", features = ["fancy"] }
 
 # Utilities
 tracing = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

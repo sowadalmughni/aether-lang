@@ -9,7 +9,13 @@ llm fn greet(name: string) -> string {
     prompt: "Generate a friendly greeting for someone named {{name}}. Keep it brief and warm."
 }
 
-// Entry point - in a full implementation, this would be callable
+// Simple flow that wraps the LLM function
+flow hello(name: string) -> string {
+    let greeting = greet(name);
+    return greeting;
+}
+
+// Traditional main function (for reference - flows are the primary entry point)
 fn main() {
     let greeting = greet("Alice");
     return greeting;

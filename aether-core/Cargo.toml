@@ -1,0 +1,12 @@
+[package]
+name = "aether-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core types and shared definitions for the Aether programming language"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

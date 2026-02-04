@@ -1,0 +1,114 @@
+// Chained flow example
+//
+// Demonstrates:
+// - Data dependencies between LLM calls
+// - Sequential execution where output of one call feeds another
+// - Template interpolation with node references
+// - Multi-step reasoning pipelines
+
+struct Summary {
+    brief: string,
+    key_points: list<string>
+}
+
+struct AnalyzedSummary {
+    original_summary: string,
+    analysis: string,
+    action_items: list<string>
+}
+
+// Step 1: Summarize the input document
+llm fn summarize_document(document: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.3,
+    max_tokens: 300,
+    prompt: "Summarize the following document in 2-3 paragraphs, focusing on the main points and conclusions.
+
+Document:
+{{document}}"
+}
+
+// Step 2: Analyze the summary (depends on summarize_document output)
+llm fn analyze_summary(summary: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.4,
+    max_tokens: 400,
+    prompt: "Analyze the following summary. Identify:
+1. The main argument or thesis
+2. Strengths of the reasoning
+3. Any potential gaps or weaknesses
+4. Implications for decision-making
+
+Summary:
+{{summary}}"
+}
+
+// Step 3: Extract action items (depends on analyze_summary output)
+llm fn extract_action_items(analysis: string) -> list<string> {
+    model: "gpt-4o",
+    temperature: 0.2,
+    max_tokens: 200,
+    prompt: "Based on the following analysis, extract a list of concrete action items.
+Return as a JSON array of strings.
+
+Analysis:
+{{analysis}}"
+}
+
+// Main flow: chains three LLM calls in sequence
+// The DAG will have dependencies: summarize -> analyze -> extract
+flow process_document(doc: string) -> AnalyzedSummary {
+    // Step 1: Summarize
+    let summary = summarize_document(doc);
+    
+    // Step 2: Analyze the summary (depends on step 1)
+    let analysis = analyze_summary(summary);
+    
+    // Step 3: Extract action items (depends on step 2)
+    let actions = extract_action_items(analysis);
+    
+    // Return combined result
+    return AnalyzedSummary {
+        original_summary: summary,
+        analysis: analysis,
+        action_items: actions
+    };
+}
+
+// Alternative: A simpler two-step chain
+llm fn translate(text: string, target_language: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.1,
+    prompt: "Translate the following text to {{target_language}}:
+
+{{text}}"
+}
+
+llm fn summarize_translation(translated_text: string) -> string {
+    model: "gpt-4o",
+    temperature: 0.3,
+    prompt: "Summarize the following translated text in one paragraph:
+
+{{translated_text}}"
+}
+
+// Two-step translation pipeline
+flow translate_and_summarize(text: string, language: string) -> string {
+    let translated = translate(text, language);
+    let summary = summarize_translation(translated);
+    return summary;
+}
+
+// Test for the chained flow
+test "process_document_chain" {
+    let doc = "The quarterly report shows a 15% increase in revenue. 
+               Customer satisfaction scores improved by 8 points.
+               However, operating costs also increased by 10%.";
+    
+    let result = process_document(doc);
+    
+    // Verify we get meaningful outputs at each stage
+    assert result.original_summary != "";
+    assert result.analysis != "";
+    assert result.action_items.length > 0;
+}

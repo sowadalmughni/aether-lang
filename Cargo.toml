@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "aether-core",
     "aether-compiler",
     "aether-runtime",
 ]
@@ -13,8 +14,13 @@ license = "MIT"
 repository = "https://github.com/sowadalmughni/aether-lang"
 
 [workspace.dependencies]
+# Internal crates
+aether-core = { path = "aether-core" }
+
 # Shared dependencies across crates
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
+clap = { version = "4.4", features = ["derive"] }
+chrono = "0.4"

@@ -7,6 +7,7 @@
 //! - Security middleware for prompt injection detection
 //! - Prometheus metrics and OpenTelemetry tracing
 
+use aether_core::{Dag, DagNode, DagNodeType};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -36,44 +37,11 @@ use llm::{LlmClient, LlmConfig, LlmRequest, create_client};
 use security::{DefaultInputSanitizer, SecurityConfig, SecurityError, SecurityMiddleware};
 
 // =============================================================================
-// Data Structures
+// Data Structures (re-export from aether-core and add runtime-specific types)
 // =============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DagNode {
-    pub id: String,
-    pub node_type: String,
-    pub prompt: Option<String>,
-    pub model: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_tokens: Option<u32>,
-    pub dependencies: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dag {
-    pub nodes: Vec<DagNode>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutionResult {
-    pub node_id: String,
-    pub output: String,
-    pub execution_time_ms: u64,
-    pub token_cost: u32,
-    pub cache_hit: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DagExecutionResponse {
-    pub execution_id: String,
-    pub results: Vec<ExecutionResult>,
-    pub total_execution_time_ms: u64,
-    pub total_token_cost: u32,
-    pub parallelization_factor: f64,
-    pub cache_hit_rate: f64,
-    pub errors: Vec<String>,
-}
+// Re-export core types for public API
+pub use aether_core::{Dag, DagNode, DagNodeType, NodeExecutionResult as ExecutionResult, DagExecutionResponse};
 
 // =============================================================================
 // Application State
@@ -236,9 +204,9 @@ fn get_execution_levels(dag: &Dag) -> Result<Vec<Vec<String>>, String> {
     Ok(levels)
 }
 
-/// Internal result for node execution
+/// Internal result for node execution (not the API response type)
 #[derive(Debug)]
-struct NodeExecutionResult {
+struct InternalNodeResult {
     output: String,
     token_cost: u32,
     cache_hit: bool,
@@ -252,10 +220,12 @@ async fn execute_node(
     cache: &LlmCache,
     llm_config: &LlmConfig,
     outputs: &HashMap<String, String>,
-) -> Result<NodeExecutionResult, String> {
+) -> Result<InternalNodeResult, String> {
     // Apply security checks if this is an LLM node with a prompt
-    if node.node_type == "llm_fn" {
-        if let Some(prompt) = &node.prompt {
+    if node.node_type == DagNodeType::LlmFn {
+        // Try prompt_template first, then legacy prompt field
+        let prompt = node.prompt_template.as_ref().or(node.prompt.as_ref());
+        if let Some(prompt) = prompt {
             match security.process_prompt(prompt).await {
                 Ok(_) => {
                     info!(node_id = %node.id, "Security check passed for prompt");
@@ -292,7 +262,7 @@ async fn execute_node(
 
             if let Some(cached) = cache.get(&cache_key) {
                 info!(node_id = %node.id, "Cache hit - returning cached response");
-                return Ok(NodeExecutionResult {
+                return Ok(InternalNodeResult {
                     output: cached.output,
                     token_cost: 0, // No cost for cached responses
                     cache_hit: true,
@@ -315,7 +285,7 @@ async fn execute_node(
                 model: model.clone(),
                 temperature: node.temperature,
                 max_tokens: node.max_tokens,
-                system_prompt: None,
+                system_prompt: node.system_prompt.clone(),
             };
 
             let llm_response = client.complete(request).await.map_err(|e| e.to_string())?;
@@ -332,7 +302,7 @@ async fn execute_node(
             };
             cache.put(&cache_key, response);
 
-            return Ok(NodeExecutionResult {
+            return Ok(InternalNodeResult {
                 output,
                 token_cost,
                 cache_hit: false,
@@ -343,7 +313,7 @@ async fn execute_node(
     // Simulate regular function call
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    Ok(NodeExecutionResult {
+    Ok(InternalNodeResult {
         output: format!("Function {} executed", node.id),
         token_cost: 0,
         cache_hit: false,

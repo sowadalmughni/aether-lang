@@ -76,51 +76,22 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
         KeyValue::new("service.version", config.service_version.clone()),
     ]);
 
-    // Create the tracer config
-    let trace_config = trace::Config::default()
-        .with_resource(resource)
-        .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio));
-
-    // Create the tracer provider builder
-    let mut tracer_builder = trace::TracerProvider::builder()
-        .with_config(trace_config);
-
-    // Add Jaeger exporter if configured
-    if config.has_jaeger() {
-        // Note: opentelemetry-jaeger uses the agent endpoint from env vars by default
-        // OTEL_EXPORTER_JAEGER_AGENT_HOST and OTEL_EXPORTER_JAEGER_AGENT_PORT
-        // or OTEL_EXPORTER_JAEGER_ENDPOINT for HTTP collector
-
-        if let Some(endpoint) = &config.jaeger_collector_endpoint {
-            std::env::set_var("OTEL_EXPORTER_JAEGER_ENDPOINT", endpoint);
-        }
-
-        #[allow(deprecated)]
-        match opentelemetry_jaeger::new_agent_pipeline()
-            .with_service_name(&config.service_name)
-            .build_batch(opentelemetry_sdk::runtime::Tokio)
-        {
-            Ok(exporter) => {
-                tracer_builder = tracer_builder.with_batch_exporter(exporter);
-                info!(
-                    service = %config.service_name,
-                    "Jaeger tracing enabled"
-                );
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize Jaeger exporter: {}", e);
-            }
-        }
-    }
-
-    let tracer_provider = tracer_builder.build();
-    let tracer = tracer_provider.tracer("aether-runtime");
+    // Create the tracer provider using 0.22-style config
+    let provider = trace::TracerProvider::builder()
+        .with_config(trace::config()
+            .with_resource(resource)
+            .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio))
+        )
+        .build();
 
     // Set global provider
-    let _ = global::set_tracer_provider(tracer_provider);
+    let _ = global::set_tracer_provider(provider);
 
-    // Create OpenTelemetry layer for tracing
-    let otel_layer = OpenTelemetryLayer::new(tracer);
+    // Get tracer
+    let tracer = global::tracer("aether-runtime");
+
+    // Create OpenTelemetry layer for tracing using 0.23-style API
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
     // Build the subscriber
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -135,7 +106,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
             .with(otel_layer)
             .init();
     } else {
-        // Without console output (for production with only Jaeger)
+        // Without console output
         tracing_subscriber::registry()
             .with(env_filter)
             .with(otel_layer)

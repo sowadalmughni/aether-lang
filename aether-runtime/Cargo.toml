@@ -25,10 +25,10 @@ thiserror = { workspace = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-opentelemetry = "0.22"
+tracing-opentelemetry = "0.23"
 opentelemetry = "0.22"
-opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
-opentelemetry-jaeger = { version = "0.22", features = ["rt-tokio"] }
+opentelemetry_sdk = { version = "0.22.1", features = ["rt-tokio"] }
+# opentelemetry-otlp temporarily removed to unblock build; will migrate later
 prometheus = "0.13"
 axum = "0.7"
 tower = "0.4"

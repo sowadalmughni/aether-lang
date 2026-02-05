@@ -95,7 +95,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
     }
 
     let tracer_provider = tracer_builder.build();
-    let tracer = tracer_provider.tracer(config.service_name.clone());
+    let _tracer = tracer_provider.tracer(config.service_name.clone());
 
     let _ = global::set_tracer_provider(tracer_provider);
 
@@ -106,14 +106,14 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
 
     if config.console_output {
         tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer())
             .with(env_filter)
             .with(tracing_subscriber::fmt::layer().compact())
-            // .with(otel_layer)
             .init();
     } else {
         tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer())
             .with(env_filter)
-            // .with(otel_layer)
             .init();
     }
 

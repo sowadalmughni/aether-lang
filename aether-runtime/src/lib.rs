@@ -1,5 +1,7 @@
 //! Aether Runtime Library
-use aether_core::{Dag, DagNode, DagNodeType, NodeState, NodeStatus, ErrorPolicy, NodeExecutionResult as ExecutionResult, DagExecutionResponse};
+use aether_core::{Dag, DagNode, DagNodeType, NodeState, NodeStatus, ErrorPolicy, NodeExecutionResult as ExecutionResult};
+pub use aether_core::DagExecutionResponse;
+
 use prometheus::{Counter, Gauge, Histogram, Registry};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
@@ -526,7 +528,7 @@ pub async fn execute_flow(
                     let cache = state.cache.clone();
                     let llm_config = state.llm_config.clone();
                     let context = (*context).clone();
-                    let outputs = (*outputs).clone();
+                    let outputs = outputs.clone();
                     let node_cloned = (*node).clone(); 
                     
                     join_set.spawn(async move {
@@ -645,3 +647,195 @@ pub async fn execute_flow(
         sequential_mode,
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aether_core::DagNode;
+
+    fn make_test_node(id: &str, deps: Vec<&str>) -> DagNode {
+        DagNode {
+            id: id.to_string(),
+            node_type: DagNodeType::Compute, 
+            name: Some(id.to_string()),
+            prompt_template: None,
+            prompt: None,
+            template_refs: Vec::new(),
+            model: None,
+            temperature: None,
+            max_tokens: None,
+            system_prompt: None,
+            dependencies: deps.into_iter().map(|s| s.to_string()).collect(),
+            cache_key_inputs: Vec::new(),
+            render_policy: Default::default(),
+            execution_hints: Default::default(),
+            return_type: None,
+            source_location: None,
+        }
+    }
+
+    #[test]
+    fn test_build_dependency_graph() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["a"]),
+            make_test_node("d", vec!["b", "c"]),
+        ]);
+
+        let level_info = get_execution_levels(&dag).unwrap();
+
+        assert_eq!(level_info.levels.len(), 3);
+        assert_eq!(level_info.levels[0], vec!["a"]);
+        assert!(level_info.levels[1].contains(&"b".to_string()));
+        assert!(level_info.levels[1].contains(&"c".to_string()));
+        assert_eq!(level_info.levels[2], vec!["d"]);
+
+        assert_eq!(level_info.node_levels.get("a"), Some(&0));
+        assert_eq!(level_info.node_levels.get("b"), Some(&1));
+        assert_eq!(level_info.node_levels.get("c"), Some(&1));
+        assert_eq!(level_info.node_levels.get("d"), Some(&2));
+    }
+
+    #[test]
+    fn test_cycle_detection() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec!["b"]),
+            make_test_node("b", vec!["a"]),
+        ]);
+
+        let result = get_execution_levels(&dag);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cycle"), "Expected cycle error, got: {}", err);
+    }
+
+    #[test]
+    fn test_cycle_detection_three_nodes() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec!["c"]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["b"]),
+        ]);
+
+        let result = get_execution_levels(&dag);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cycle"), "Expected cycle error, got: {}", err);
+    }
+
+    #[test]
+    fn test_parallel_independent_nodes() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec![]),
+            make_test_node("c", vec![]),
+        ]);
+
+        let level_info = get_execution_levels(&dag).unwrap();
+
+        assert_eq!(level_info.levels.len(), 1);
+        assert_eq!(level_info.levels[0].len(), 3);
+    }
+
+    #[test]
+    fn test_complex_dag_levels() {
+        let dag = Dag::with_nodes(vec![
+            make_test_node("a", vec![]),
+            make_test_node("b", vec!["a"]),
+            make_test_node("c", vec!["a"]),
+            make_test_node("d", vec!["b", "c"]),
+            make_test_node("e", vec![]),  
+        ]);
+
+        let level_info = get_execution_levels(&dag).unwrap();
+
+        assert_eq!(level_info.levels.len(), 3);
+        assert!(level_info.levels[0].contains(&"a".to_string()));
+        assert!(level_info.levels[0].contains(&"e".to_string()));
+        assert!(level_info.levels[1].contains(&"b".to_string()));
+        assert!(level_info.levels[1].contains(&"c".to_string()));
+        assert!(level_info.levels[2].contains(&"d".to_string()));
+    }
+
+    #[test]
+    fn test_empty_dag() {
+        let dag = Dag::with_nodes(vec![]);
+        let level_info = get_execution_levels(&dag).unwrap();
+        assert!(level_info.levels.is_empty());
+        assert!(level_info.node_levels.is_empty());
+    }
+
+    #[test]
+    fn test_single_node_dag() {
+        let dag = Dag::with_nodes(vec![make_test_node("only", vec![])]);
+        let level_info = get_execution_levels(&dag).unwrap();
+        assert_eq!(level_info.levels.len(), 1);
+        assert_eq!(level_info.levels[0], vec!["only".to_string()]);
+    }
+
+    #[test]
+    fn test_percentiles_empty_samples() {
+        let percentiles = compute_percentiles(&[]);
+        assert!(percentiles.p50.is_none());
+        assert!(percentiles.p95.is_none());
+        assert!(percentiles.p99.is_none());
+    }
+
+    #[test]
+    fn test_percentiles_single_sample() {
+        let percentiles = compute_percentiles(&[100]);
+        assert_eq!(percentiles.p50, Some(100));
+        assert_eq!(percentiles.p95, Some(100));
+        assert_eq!(percentiles.p99, Some(100));
+    }
+
+    #[test]
+    fn test_percentiles_two_samples() {
+        let percentiles = compute_percentiles(&[10, 20]);
+        assert_eq!(percentiles.p50, Some(10));
+        assert_eq!(percentiles.p95, Some(10));
+        assert_eq!(percentiles.p99, Some(10));
+    }
+
+    #[test]
+    fn test_percentiles_ten_samples() {
+        let samples: Vec<u64> = (1..=10).collect();
+        let percentiles = compute_percentiles(&samples);
+        assert_eq!(percentiles.p50, Some(5));
+        assert_eq!(percentiles.p95, Some(9));
+        assert_eq!(percentiles.p99, Some(9));
+    }
+
+    #[test]
+    fn test_percentiles_hundred_samples() {
+        let samples: Vec<u64> = (1..=100).collect();
+        let percentiles = compute_percentiles(&samples);
+        assert_eq!(percentiles.p50, Some(50));
+        assert_eq!(percentiles.p95, Some(95));
+        assert_eq!(percentiles.p99, Some(99));
+    }
+
+    #[test]
+    fn test_percentiles_unsorted_input() {
+        let samples = vec![50, 10, 90, 30, 70, 20, 80, 40, 60, 100];
+        let percentiles = compute_percentiles(&samples);
+        assert_eq!(percentiles.p50, Some(50));
+        assert_eq!(percentiles.p95, Some(90));
+        assert_eq!(percentiles.p99, Some(90));
+    }
+
+    #[test]
+    fn test_percentiles_with_duplicates() {
+        let samples = vec![100, 100, 100, 100, 100, 200, 200, 200, 200, 200];
+        let percentiles = compute_percentiles(&samples);
+        assert_eq!(percentiles.p50, Some(100));
+        assert_eq!(percentiles.p95, Some(200));
+        assert_eq!(percentiles.p99, Some(200));
+    }
+}
+

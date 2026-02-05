@@ -4,7 +4,7 @@ use aether_runtime::{
     AppState, Metrics, execute_flow,
     context::ExecutionContext,
     llm::LlmConfig,
-    security::{SecurityMiddleware, SecurityConfig},
+    security::{SecurityMiddleware, SecurityConfig, DefaultInputSanitizer},
     cache::{LlmCache, CacheConfig},
 };
 use std::sync::Arc;
@@ -13,7 +13,9 @@ use std::collections::HashMap;
 
 fn create_bench_state() -> AppState {
     let metrics = Arc::new(Metrics::new());
-    let security = Arc::new(SecurityMiddleware::new(SecurityConfig::default()));
+    let security_config = SecurityConfig::default();
+    let sanitizer = DefaultInputSanitizer::new(security_config);
+    let security = Arc::new(SecurityMiddleware::new(Box::new(sanitizer)));
     // Use large capacity for bench to avoid eviction noise, or small to test eviction?
     // Let's use default.
     let cache = Arc::new(LlmCache::new(CacheConfig::default()));
@@ -29,26 +31,19 @@ fn create_bench_state() -> AppState {
 
 fn create_simple_dag() -> Dag {
     // A -> B -> C
-    let node_a = DagNode {
-        id: "a".to_string(),
-        node_type: DagNodeType::LlmFn,
-        prompt: Some("Node A prompt".to_string()),
-        ..DagNode::default()
-    };
-    let node_b = DagNode {
-        id: "b".to_string(),
-        node_type: DagNodeType::LlmFn,
-        prompt: Some("Node B prompt".to_string()),
-        dependencies: vec!["a".to_string()],
-        ..DagNode::default()
-    };
-    let node_c = DagNode {
-        id: "c".to_string(),
-        node_type: DagNodeType::LlmFn,
-        prompt: Some("Node C prompt".to_string()),
-        dependencies: vec!["b".to_string()],
-        ..DagNode::default()
-    };
+    let node_a = DagNode::llm_fn("a")
+        .prompt("Node A prompt")
+        .build();
+    
+    let node_b = DagNode::llm_fn("b")
+        .prompt("Node B prompt")
+        .dependency("a")
+        .build();
+    
+    let node_c = DagNode::llm_fn("c")
+        .prompt("Node C prompt")
+        .dependency("b")
+        .build();
 
     Dag::with_nodes(vec![node_a, node_b, node_c])
 }
@@ -94,11 +89,7 @@ fn create_parallel_dag() -> Dag {
     // 10 independent nodes
     let mut nodes = Vec::new();
     for i in 0..10 {
-        nodes.push(DagNode {
-            id: format!("node_{}", i),
-            node_type: DagNodeType::Function, // simpler, faster
-            ..DagNode::default()
-        }); 
+        nodes.push(DagNode::compute(format!("node_{}", i)).build()); 
     }
     Dag::with_nodes(nodes)
 }

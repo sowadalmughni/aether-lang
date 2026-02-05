@@ -23,6 +23,8 @@ node_modules/
 .pnpm-store/
 dist/
 *.log
+check_log*.txt
+bench_check_log.txt
 npm-debug.log*
 pnpm-debug.log*
 

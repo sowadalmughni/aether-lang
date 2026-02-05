@@ -71,17 +71,19 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     // Create resource with service info
-    let resource = Resource::builder()
-        .with_attributes([
-            KeyValue::new("service.name", config.service_name.clone()),
-            KeyValue::new("service.version", config.service_version.clone()),
-        ])
-        .build();
+    let resource = Resource::new(vec![
+        KeyValue::new("service.name", config.service_name.clone()),
+        KeyValue::new("service.version", config.service_version.clone()),
+    ]);
 
-    // Create the tracer provider
-    let mut tracer_builder = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+    // Create the tracer config
+    let trace_config = trace::Config::default()
         .with_resource(resource)
         .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio));
+
+    // Create the tracer provider builder
+    let mut tracer_builder = trace::TracerProvider::builder()
+        .with_config(trace_config);
 
     // Add Jaeger exporter if configured
     if config.has_jaeger() {
@@ -93,6 +95,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
             std::env::set_var("OTEL_EXPORTER_JAEGER_ENDPOINT", endpoint);
         }
 
+        #[allow(deprecated)]
         match opentelemetry_jaeger::new_agent_pipeline()
             .with_service_name(&config.service_name)
             .build_batch(opentelemetry_sdk::runtime::Tokio)

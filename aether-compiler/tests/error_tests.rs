@@ -231,10 +231,10 @@ fn test_complex_types_parse() {
 #[test]
 fn test_template_interpolation_parses() {
     let source = r#"
-        llm fn greet(name: string, context: string) -> string {
+        llm fn greet(name: string, ctx: string) -> string {
             model: "gpt-4o",
             system: "You are a helpful assistant",
-            prompt: "Hello {{name}}, here is some context: {{context}}"
+            prompt: "Hello {{name}}, here is some context: {{ctx}}"
         }
     "#;
 

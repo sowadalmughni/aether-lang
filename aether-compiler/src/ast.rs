@@ -333,7 +333,7 @@ pub struct ImportName {
 
 /// Type representation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "type_kind")]
 pub enum Type {
     /// Named type: `Sentiment`, `Message`
     Named { name: String, span: Span },
@@ -701,7 +701,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&ty).unwrap();
-        assert!(json.contains("\"kind\":\"List\""));
+        assert!(json.contains("\"type_kind\":\"List\""));
     }
 
     #[test]
@@ -723,7 +723,8 @@ mod tests {
             span: Span::new(0, 37),
         })]);
 
-        let json = serde_json::to_string_pretty(&program).unwrap();
+        let json = serde_json::to_string(&program).unwrap();
+        println!("JSON: {}", json);
         assert!(json.contains("\"kind\":\"Enum\""));
         assert!(json.contains("\"Sentiment\""));
     }

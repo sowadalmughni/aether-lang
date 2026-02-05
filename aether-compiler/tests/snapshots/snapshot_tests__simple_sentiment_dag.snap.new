@@ -1,0 +1,48 @@
+---
+source: aether-compiler/tests/snapshot_tests.rs
+assertion_line: 39
+expression: dag
+---
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "analyze",
+    "source_file": "test.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-05T07:28:43.981213700+00:00",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "output_type": "Sentiment"
+  },
+  "nodes": [
+    {
+      "id": "result",
+      "node_type": "llm_fn",
+      "name": "classify_sentiment",
+      "prompt_template": "Classify sentiment: {{text}}",
+      "template_refs": [
+        {
+          "raw": "{{text}}",
+          "kind": "parameter",
+          "path": [
+            "input"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "input"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "temperature": 0.1,
+      "dependencies": [],
+      "return_type": "Sentiment"
+    }
+  ]
+}

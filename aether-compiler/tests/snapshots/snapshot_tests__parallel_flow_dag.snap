@@ -1,0 +1,69 @@
+---
+source: aether-compiler/tests/snapshot_tests.rs
+expression: dag
+---
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "analyze",
+    "source_file": "test.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-05T07:30:02.546114600+00:00",
+    "inputs": [
+      {
+        "name": "doc",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "output_type": "string"
+  },
+  "nodes": [
+    {
+      "id": "summary",
+      "node_type": "llm_fn",
+      "name": "summarize",
+      "prompt_template": "Summarize: {{text}}",
+      "template_refs": [
+        {
+          "raw": "{{text}}",
+          "kind": "parameter",
+          "path": [
+            "doc"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "doc"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [],
+      "return_type": "string"
+    },
+    {
+      "id": "entities",
+      "node_type": "llm_fn",
+      "name": "extract_entities",
+      "prompt_template": "Extract entities: {{text}}",
+      "template_refs": [
+        {
+          "raw": "{{text}}",
+          "kind": "parameter",
+          "path": [
+            "doc"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "doc"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [],
+      "return_type": "string"
+    }
+  ]
+}

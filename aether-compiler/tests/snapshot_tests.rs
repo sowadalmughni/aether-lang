@@ -120,8 +120,8 @@ fn test_template_refs_metadata() {
             prompt: "Say hello to {{name}} in a {{mood}} way"
         }
 
-        flow hello(user: string, style: string) -> string {
-            let greeting = greet(user, style);
+        flow hello(username: string, style: string) -> string {
+            let greeting = greet(username, style);
             return greeting;
         }
     "#;

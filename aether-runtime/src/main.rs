@@ -9,7 +9,7 @@
 //! - ExecutionContext for template substitution
 //! - Error policies: Fail, Skip, Retry
 
-use aether_core::{Dag, DagNode, DagNodeType, NodeState, NodeStatus, ErrorPolicy};
+use aether_core::{NodeState, NodeStatus, ErrorPolicy};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -36,11 +36,11 @@ mod security;
 mod telemetry;
 mod template;
 
-use cache::{CacheConfig, CacheKey, CachedResponse, LlmCache, current_timestamp};
+use cache::{CacheConfig, CacheKey, CachedResponse, LlmCache};
 use context::ExecutionContext;
 use llm::{LlmClient, LlmConfig, LlmRequest, create_client};
 use security::{DefaultInputSanitizer, SecurityConfig, SecurityError, SecurityMiddleware};
-use template::{render_node_prompt, RenderOptions};
+use template::render_node_prompt;
 
 // =============================================================================
 // Percentile Computation
@@ -270,11 +270,7 @@ fn get_execution_levels(dag: &Dag) -> Result<DagLevelInfo, String> {
         node_levels,
     })
 }
-        levels[level].push(node_id);
-    }
 
-    Ok(levels)
-}
 
 /// Internal result for node execution (not the API response type)
 #[derive(Debug)]

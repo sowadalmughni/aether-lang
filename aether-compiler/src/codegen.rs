@@ -735,8 +735,8 @@ mod tests {
                 prompt: "Say hello to {{name}}"
             }
 
-            flow hello(user: string) -> string {
-                let greeting = greet(user);
+            flow hello(username: string) -> string {
+                let greeting = greet(username);
                 return greeting;
             }
         "#;

@@ -1,0 +1,94 @@
+---
+source: aether-compiler/tests/snapshot_tests.rs
+expression: dag
+---
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "pipeline",
+    "source_file": "test.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-05T07:30:02.546131200+00:00",
+    "inputs": [
+      {
+        "name": "doc",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "output_type": "string"
+  },
+  "nodes": [
+    {
+      "id": "summary",
+      "node_type": "llm_fn",
+      "name": "summarize",
+      "prompt_template": "Summarize: {{text}}",
+      "template_refs": [
+        {
+          "raw": "{{text}}",
+          "kind": "parameter",
+          "path": [
+            "doc"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "doc"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [],
+      "return_type": "string"
+    },
+    {
+      "id": "analysis",
+      "node_type": "llm_fn",
+      "name": "analyze",
+      "prompt_template": "Analyze: {{summary}}",
+      "template_refs": [
+        {
+          "raw": "{{summary}}",
+          "kind": "node_output",
+          "node_id": "summary",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "summary"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [
+        "summary"
+      ],
+      "return_type": "string"
+    },
+    {
+      "id": "actions",
+      "node_type": "llm_fn",
+      "name": "extract_actions",
+      "prompt_template": "Actions: {{analysis}}",
+      "template_refs": [
+        {
+          "raw": "{{analysis}}",
+          "kind": "node_output",
+          "node_id": "analysis",
+          "field": "output",
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "analysis"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [
+        "analysis"
+      ],
+      "return_type": "string"
+    }
+  ]
+}

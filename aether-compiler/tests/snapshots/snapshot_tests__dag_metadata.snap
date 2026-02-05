@@ -1,0 +1,51 @@
+---
+source: aether-compiler/tests/snapshot_tests.rs
+expression: dag
+---
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "test_flow",
+    "source_file": "test.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-05T07:30:02.546121+00:00",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "count",
+        "type": "int",
+        "required": true
+      }
+    ],
+    "output_type": "string"
+  },
+  "nodes": [
+    {
+      "id": "out",
+      "node_type": "llm_fn",
+      "name": "echo",
+      "prompt_template": "Echo: {{msg}}",
+      "template_refs": [
+        {
+          "raw": "{{msg}}",
+          "kind": "parameter",
+          "path": [
+            "input"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "input"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [],
+      "return_type": "string"
+    }
+  ]
+}

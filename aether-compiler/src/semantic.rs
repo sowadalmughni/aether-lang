@@ -1935,7 +1935,7 @@ mod tests {
                 prompt: "Hello {{name}}"
             }
 
-            flow test(x: string) -> string {
+            flow test_func(x: string) -> string {
                 let result = greet(x, x);
                 return result;
             }
@@ -1973,7 +1973,7 @@ mod tests {
         let source = r#"
             struct Point { x: int, y: int }
 
-            flow test(p: Point) -> int {
+            flow test_func(p: Point) -> int {
                 return p.z;
             }
         "#;
@@ -1992,7 +1992,7 @@ mod tests {
         let source = r#"
             enum Color { Red, Green, Blue }
 
-            flow test() -> Color {
+            flow test_func() -> Color {
                 return Color::Yellow;
             }
         "#;

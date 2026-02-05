@@ -1,0 +1,63 @@
+---
+source: aether-compiler/tests/snapshot_tests.rs
+expression: dag
+---
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "flow_name": "hello",
+    "source_file": "test.aether",
+    "compiler_version": "0.1.0",
+    "compiled_at": "2026-02-05T07:30:02.546124+00:00",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "style",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "output_type": "string"
+  },
+  "nodes": [
+    {
+      "id": "greeting",
+      "node_type": "llm_fn",
+      "name": "greet",
+      "prompt_template": "Say hello to {{name}} in a {{mood}} way",
+      "template_refs": [
+        {
+          "raw": "{{name}}",
+          "kind": "parameter",
+          "path": [
+            "username"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "username"
+          }
+        },
+        {
+          "raw": "{{mood}}",
+          "kind": "parameter",
+          "path": [
+            "style"
+          ],
+          "required": true,
+          "sensitivity": "low",
+          "provenance": {
+            "original_expr": "style"
+          }
+        }
+      ],
+      "model": "gpt-4o",
+      "dependencies": [],
+      "return_type": "string"
+    }
+  ]
+}

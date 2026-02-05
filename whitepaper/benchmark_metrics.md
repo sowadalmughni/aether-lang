@@ -1,7 +1,8 @@
 # Benchmark Metrics: Normalized Results
 
-**Date**: February 4, 2026  
-**Environment**: Mock LLM providers, 100ms simulated latency
+**Date**: February 5, 2026  
+**Environment**: Mock LLM providers, 100ms simulated latency  
+**Runtime Benchmarks**: Criterion 0.5 with async_tokio
 
 ---
 
@@ -48,3 +49,45 @@ Based on runtime design (3 parallel LLM calls, 60% cache hit rate):
 | Aether (parallel) | 103* | 60%* | Yes | 100%* |
 
 *Projected values
+
+---
+
+## D. Criterion Runtime Benchmarks
+
+**Framework**: Criterion 0.5 with async_tokio  
+**Location**: `aether-runtime/benches/runtime_benchmarks.rs`
+
+| Benchmark | Description | Nodes | Parallelism |
+|-----------|-------------|-------|-------------|
+| `execute_simple_dag_sequential` | Linear A→B→C chain | 3 | Sequential |
+| `execute_simple_dag_parallel` | Same DAG, parallel mode | 3 | Enabled* |
+| `execute_parallel_dag_10_nodes` | 10 independent nodes | 10 | Full parallel |
+
+*Structure constrains parallelism in linear DAG
+
+### Running Criterion Benchmarks
+
+```bash
+cd aether-runtime
+cargo bench
+```
+
+### Benchmark Configuration
+- Uses `MockLlmClient` for deterministic results
+- `AppState` with default `CacheConfig` (1000 entries)
+- `SecurityMiddleware` with default patterns
+- Async runtime via Tokio
+
+---
+
+## E. Telemetry Integration
+
+**Status**: Fully operational (v2.7)  
+**Protocol**: OTLP gRPC (compatible with Jaeger, Zipkin)
+
+| Metric Type | Endpoint | Provider |
+|-------------|----------|----------|
+| Traces | `/metrics` | OpenTelemetry OTLP |
+| Histograms | `/metrics` | Prometheus |
+| Counters | `/metrics` | Prometheus |
+

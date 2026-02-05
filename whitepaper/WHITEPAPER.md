@@ -2,8 +2,8 @@
 title: "Aether: A Domain-Specific Language for Type-Safe LLM Orchestration"
 author: "Md. Sowad Al-Mughni"
 date: "February 2026"
-version: "2.6"
-status: "Prototype - Phase 1 Complete, Runtime MVP with Full Benchmark Suite"
+version: "2.7"
+status: "Prototype - Phase 1-3 Complete, Approaching Beta Milestone"
 ---
 
 <!-- toc -->
@@ -14,7 +14,7 @@ Large language models are increasingly deployed in production systems, yet the e
 
 Aether is a domain-specific programming language designed to treat LLM orchestration as a first-class engineering discipline. The language introduces three core abstractions: `llm fn` for typed LLM interactions with explicit input/output schemas, `flow` for DAG-based workflow orchestration, and `context` for state management across interactions. The Aether compiler performs static analysis to verify type contracts, identify parallelization opportunities, and generate optimized execution plans.
 
-**Current Status**: Aether is in active prototype stage with the Type System MVP, End-to-End Demo Loop, Runtime MVP, and **Full Benchmark Suite** complete. The lexer, parser, semantic analyzer, and code generator are fully implemented, producing DAG JSON output from Aether source files. The compiler CLI (`aetherc`) supports `compile`, `check`, `parse`, and `run` commands. The `run` command compiles Aether source, sends the DAG to the runtime for execution, and displays formatted results including node outputs, execution times, token counts, and cache statistics. The runtime now implements dependency-aware parallel execution via topological sort and level-based JoinSet scheduling, exact-match LRU caching with tokens_saved tracking, template substitution (`{{context.KEY}}`, `{{node.ID.output}}`), error policies (Fail/Skip/Retry), and comprehensive observability (Prometheus metrics, OpenTelemetry tracing). Runtime URL is configurable via `--runtime-url` flag or `AETHER_RUNTIME_URL` environment variable. **Provider switching** is now supported via the `AETHER_PROVIDER` environment variable (`mock|openai|anthropic`) for deterministic benchmarking and real API testing. Semantic analysis includes comprehensive type checking with forward-only type inference, template variable validation (`{{variable}}`, `{{context.KEY}}`, `{{node.ID.output}}`), duplicate detection for all symbol types, call validation with argument count and type checking, return type verification, and cycle detection via topological sort. Error messages include source locations (line, column) and "Did you mean?" suggestions using Levenshtein distance. Template placeholders are preserved with machine-readable `template_refs` metadata for runtime substitution, security policy enforcement, and cache key computation. The DAG Visualizer now features hierarchical layout using dagre.js, file loading (drag-and-drop or file picker), and execution status display with color-coded nodes (green=cached, blue=executed, red=failed, gray=skipped). **Benchmark infrastructure is now complete** with synthetic datasets (`bench/datasets/`), Python benchmark runner (`scripts/run_benchmark.py`), and CI integration (`.github/workflows/benchmark.yml`). All performance projections in this paper are theoretical and await empirical validation using this infrastructure.
+**Current Status**: Aether is in active prototype stage approaching the Beta milestone (July 2026). The Type System MVP, End-to-End Demo Loop, Runtime MVP, **Full Benchmark Suite**, and **Telemetry Integration** are complete. The lexer, parser, semantic analyzer, and code generator are fully implemented, producing DAG JSON output from Aether source files. The compiler CLI (`aetherc`) supports `compile`, `check`, `parse`, and `run` commands. The runtime implements dependency-aware parallel execution via topological sort and level-based JoinSet scheduling, exact-match LRU caching with tokens_saved tracking, template substitution (`{{context.KEY}}`, `{{node.ID.output}}`), error policies (Fail/Skip/Retry), and comprehensive observability (Prometheus metrics, **OTLP tracing with OpenTelemetry 0.21.0**). **Provider switching** is supported via the `AETHER_PROVIDER` environment variable (`mock|openai|anthropic`). **Criterion performance benchmarks** are now available for DAG execution profiling (`aether-runtime/benches/`). Semantic analysis includes comprehensive type checking with forward-only type inference, template variable validation, duplicate detection, call validation, return type verification, and cycle detection. Error messages include source locations and "Did you mean?" suggestions using Levenshtein distance. The DAG Visualizer features hierarchical layout using dagre.js with color-coded execution status. **Benchmark infrastructure is complete** with synthetic datasets (`bench/datasets/`), Python benchmark runner (`scripts/run_benchmark.py`), Criterion benchmarks, and CI integration (`.github/workflows/benchmark.yml`). All performance projections in this paper are theoretical and await empirical validation using this infrastructure.
 
 **Key Contributions**:
 1. A type system that spans LLM inputs, outputs, and workflow compositions with compile-time verification
@@ -854,7 +854,27 @@ Based on theoretical analysis and reported results from related systems:
 
 **Caveat**: These projections assume successful implementation of all planned features. Actual results may differ significantly.
 
-### 8.5 Ablation Studies
+### 8.5 Criterion Native Benchmarks (v2.7)
+
+**Location**: `aether-runtime/benches/runtime_benchmarks.rs`  
+**Framework**: Criterion 0.5 with async_tokio
+
+The Aether runtime includes native Rust benchmarks using the Criterion framework for precise performance measurement of DAG execution:
+
+| Benchmark | Description | Configuration |
+|-----------|-------------|---------------|
+| `execute_simple_dag_sequential` | Linear A→B→C chain | 3 nodes, sequential mode |
+| `execute_simple_dag_parallel` | Linear A→B→C chain | 3 nodes, parallel mode |
+| `execute_parallel_dag_10_nodes` | 10 independent nodes | Full parallelism |
+
+**Running**:
+```bash
+cd aether-runtime && cargo bench
+```
+
+These benchmarks complement the Python-based benchmarks by providing low-level performance profiling without LLM API latency.
+
+### 8.6 Ablation Studies
 
 To isolate the contribution of each feature:
 
@@ -867,7 +887,7 @@ To isolate the contribution of each feature:
    - Response includes `sequential_mode: true|false` for verification
 3. **Type safety ablation**: Measure errors caught at compile time vs. runtime
 
-### 8.6 Reproducibility Plan
+### 8.7 Reproducibility Plan
 
 All benchmarks will be:
 - Published with complete source code

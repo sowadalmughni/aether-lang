@@ -1,8 +1,8 @@
 # Aether Whitepaper Changelog
 
-**Current Version**: 2.6  
-**Last Updated**: February 4, 2026  
-**Status**: Prototype - Phase 1 Complete, Runtime MVP with Full Benchmark Suite
+**Current Version**: 2.7  
+**Last Updated**: February 5, 2026  
+**Status**: Prototype - Phase 1-3 Complete, Approaching Beta Milestone
 
 ---
 
@@ -10,6 +10,7 @@
 
 | Version | Date | Status | Summary |
 |---------|------|--------|---------|
+| 2.7 | Feb 5, 2026 | Telemetry & Benchmarks | OTLP tracing re-enabled, criterion benchmarks, OpenTelemetry 0.21.0 |
 | 2.6 | Feb 4, 2026 | Full Benchmark Suite | Synthetic datasets, benchmark runner, provider switching, CI integration |
 | 2.5 | Feb 4, 2026 | Benchmark Infrastructure | Latency percentiles, sequential mode, baseline stubs |
 | 2.4 | Feb 4, 2026 | Runtime MVP | Parallel execution, caching, template engine, observability |
@@ -18,6 +19,38 @@
 | 2.1 | Feb 2026 | Phase 1 Complete | Parser, semantic analysis, code generator, CLI |
 | 2.0 | Feb 2026 | Major Revision | Research update, restructured whitepaper |
 | 1.0 | Jul 2025 | Initial Draft | Original whitepaper |
+
+---
+
+## [2.7] - February 5, 2026
+
+### Summary
+Telemetry layer fully re-enabled with OTLP support. Added criterion-based performance benchmarks for DAG execution. Updated OpenTelemetry dependencies.
+
+### Added
+- **Telemetry Re-enablement**:
+  - `tracing_opentelemetry::layer()` now fully integrated and working
+  - OTLP export support for Jaeger, Zipkin, and other backends
+  - Replaced deprecated `opentelemetry-jaeger` with `opentelemetry-otlp`
+- **Criterion Performance Benchmarks** (`aether-runtime/benches/runtime_benchmarks.rs`):
+  - `execute_simple_dag_sequential`: Sequential A→B→C execution
+  - `execute_simple_dag_parallel`: Parallel mode (structure-constrained)
+  - `execute_parallel_dag_10_nodes`: 10 independent nodes benchmark
+- **Cargo.toml Updates**:
+  - Added `criterion = { version = "0.5", features = ["async_tokio"] }` as dev-dependency
+  - Added `[[bench]]` configuration for `runtime_benchmarks`
+
+### Changed
+- **OpenTelemetry Dependencies**:
+  - `tracing-opentelemetry`: 0.22.0
+  - `opentelemetry`: 0.21.0 
+  - `opentelemetry_sdk`: 0.21.0
+  - `opentelemetry-otlp`: 0.14.0
+- Section 1 (Executive Summary): Updated status to "Approaching Beta Milestone"
+- Telemetry module (`telemetry.rs`): Refactored for OTLP compatibility
+
+### Technical Details
+The telemetry initialization now uses `opentelemetry_otlp::new_exporter().tonic()` for OTLP gRPC export, with fallback to `http://localhost:4317` default endpoint. The `TelemetryConfig` maintains backward-compatible `jaeger_agent_endpoint` and `jaeger_collector_endpoint` fields.
 
 ---
 

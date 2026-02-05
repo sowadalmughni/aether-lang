@@ -13,7 +13,7 @@ A programming language designed for efficient, reliable, and scalable Large Lang
 
 Aether transforms LLM integration from fragile scripting into robust, engineered systems. By providing first-class abstractions for LLM orchestration, intelligent caching, and type-safe prompt management, Aether enables developers to build production-grade AI applications with confidence.
 
-**Current Status**: Prototype - Phase 1 Complete, Runtime MVP with Benchmark Infrastructure (v2.5)
+**Current Status**: Prototype v2.7 - Phase 1-3 Complete, Approaching Beta Milestone
 
 ### Key Features
 
@@ -206,7 +206,8 @@ cargo doc --workspace --no-deps
 |-------|--------|-------------|
 | **Phase 1: Core Compiler** | ✅ Complete | Parser, semantic analysis, type checking, DAG generation |
 | **Phase 2: Runtime MVP** | ✅ Complete | Parallel execution, caching, template engine, observability |
-| **Phase 2.5: Benchmarks** | ✅ Complete | Latency percentiles, sequential mode, baseline stubs |
+| **Phase 2.5: Benchmarks** | ✅ Complete | Latency percentiles, sequential mode, baseline stubs, criterion benchmarks |
+| **Phase 2.7: Telemetry** | ✅ Complete | OTLP tracing re-enabled, OpenTelemetry 0.21.0 integration |
 | **Phase 3: Advanced Caching** | 🔄 In Progress | Semantic cache, provider prefix caching |
 | **Phase 4: IDE Tooling** | 📋 Planned | VS Code extension, LSP support |
 | **Phase 5: Production** | 📋 Planned | Multi-level caching, guardrails, taint tracking |

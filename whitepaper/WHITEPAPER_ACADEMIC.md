@@ -2,8 +2,8 @@
 title: "Aether: A Domain-Specific Language for Type-Safe LLM Orchestration"
 author: "Md. Sowad Al-Mughni"
 date: "February 2026"
-version: "3.0-academic"
-status: "Prototype with Benchmark Infrastructure"
+version: "3.1-academic"
+status: "Prototype - Phase 1-3 Complete, Approaching Beta"
 ---
 
 ## Abstract
@@ -12,7 +12,7 @@ Large language model (LLM) integration in production systems suffers from five s
 
 This paper presents Aether, a domain-specific language that treats LLM orchestration as a first-class engineering discipline. Aether introduces three core abstractions: `llm fn` for typed LLM interactions, `flow` for DAG-based workflow composition, and `context` for state management. The Aether compiler performs static analysis to verify type contracts across workflow steps, identify parallelization opportunities, and enforce security policies through compile-time taint tracking.
 
-We make four contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems; and (4) an open-source prototype implementation. Baseline benchmarks show LangChain achieves p50=91.4ms (0% cache hit, 95% success rate) and DSPy achieves p50=68.4ms (0% cache hit, 100% success rate) on synthetic workloads. Aether's design projects 2.7x latency reduction through parallel execution and 60% cache hit rate improvement; runtime validation requires MSVC toolchain (see Section 9.7.4). The compiler catches all tested type and reference errors at compile time that would otherwise surface at runtime.
+We make four contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems; and (4) an open-source prototype implementation with **OTLP tracing** (OpenTelemetry 0.21.0) and **Criterion benchmarks**. Baseline benchmarks show LangChain achieves p50=91.4ms (0% cache hit, 95% success rate) and DSPy achieves p50=68.4ms (0% cache hit, 100% success rate) on synthetic workloads. Aether's design projects 2.7x latency reduction through parallel execution and 60% cache hit rate improvement; runtime validation requires MSVC toolchain (see Section 9.7.4). The compiler catches all tested type and reference errors at compile time that would otherwise surface at runtime.
 
 **Keywords**: domain-specific languages, large language models, type systems, workflow orchestration, static analysis
 
@@ -532,9 +532,13 @@ The context manager provides:
 Built-in observability includes:
 
 - **Structured logging**: tracing crate with spans for all LLM interactions
-- **Distributed tracing**: OpenTelemetry with Jaeger export support
+- **Distributed tracing**: OpenTelemetry 0.21.0 with **OTLP export** (replaces deprecated Jaeger exporter)
+  - Compatible with Jaeger, Zipkin, and other OTLP-compliant backends
+  - `tracing-opentelemetry` 0.22.0 layer integration
+  - Configurable via `JAEGER_COLLECTOR_ENDPOINT` or `JAEGER_AGENT_ENDPOINT` environment variables
 - **Metrics export**: Prometheus-compatible `/metrics` endpoint
 - **Per-execution response fields**: `level_execution_times_ms`, `node_execution_times_ms`, `tokens_saved`
+- **Criterion benchmarks**: Native Rust benchmarks in `aether-runtime/benches/` for DAG execution profiling
 
 ### 7.5 Template Engine
 
@@ -1282,7 +1286,7 @@ This appendix provides detailed status for all implemented components.
 | Mock LLM Client | Complete | Configurable latency |
 | OpenAI Client | Implemented | Feature flag |
 | Anthropic Client | Implemented | Feature flag |
-| Observability | Partial | Tracing, Prometheus planned |
+| Observability | Complete | Tracing (OTLP), Prometheus metrics, Criterion benchmarks |
 
 ### B.3 Tooling Status
 

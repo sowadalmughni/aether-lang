@@ -137,10 +137,10 @@ cargo doc --no-deps
 
 ## 📈 Roadmap
 
-- **Q3 2025**: Complete parser and semantic analysis
-- **Q4 2025**: Full runtime with LLM integration
-- **Q1 2026**: Advanced caching and optimization
-- **Q2 2026**: Production tooling and IDE support
+- **Q3 2025**: Complete parser and semantic analysis ✅
+- **Q4 2025**: Full runtime with LLM integration ✅
+- **Q1 2026**: Advanced caching and optimization 🔄
+- **Q2 2026**: Production tooling and IDE support 📋
 
 See [roadmap.gantt.yml](roadmap.gantt.yml) for detailed timeline.
 

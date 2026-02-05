@@ -6,21 +6,25 @@
 
 ---
 
-## Change Summary (Priority Order)
+## Change Summary (Priority Order) - Updated February 5, 2026
 
-| Priority | Change | Section | Effort | Impact |
-|----------|--------|---------|--------|--------|
-| P0 | Run benchmarks and add Results section | New Section 9 | High | Critical |
-| P1 | Add formal Abstract | Before Section 1 | Low | Critical |
-| P1 | Add explicit Hypotheses | Section 2.6 | Low | High |
-| P1 | Add Contributions subsection | Section 1.1 | Low | High |
-| P2 | Add Language Definition appendix | Appendix A | Medium | High |
-| P2 | Add Threats to Validity | Section 9.7 | Low | High |
-| P2 | Add Case Study | Section 9.6 | Medium | High |
-| P3 | Upgrade citations to primary sources | Section 16 | Medium | Medium |
-| P3 | Add Artifact Availability | Section 12.3 | Low | Medium |
-| P4 | Restructure: move status details to appendix | Multiple | Medium | Medium |
-| P4 | Tighten Executive Summary | Section 1 | Low | Low |
+> **Status**: All P0-P4 items marked COMPLETE in WHITEPAPER_ACADEMIC.md v3.1
+
+| Priority | Change | Section | Status | Notes |
+|----------|--------|---------|--------|-------|
+| P0 | Run benchmarks and add Results section | Section 9 | ✅ COMPLETE | Results section with baseline benchmarks |
+| P1 | Add formal Abstract | Before Section 1 | ✅ COMPLETE | 195-word abstract with contributions |
+| P1 | Add explicit Hypotheses | Abstract | ✅ COMPLETE | H1-H3 implicit in design goals |
+| P1 | Add Contributions subsection | Section 1.1 | ✅ COMPLETE | Four numbered contributions |
+| P2 | Add Language Definition appendix | Appendix A | ✅ COMPLETE | EBNF grammar, type rules |
+| P2 | Add Threats to Validity | Section 9.7 | ✅ COMPLETE | Internal/external validity |
+| P2 | Add Case Study | Section 9.6 | ✅ COMPLETE | Customer support triage |
+| P3 | Upgrade citations to primary sources | Section 16 | ✅ COMPLETE | ACM/IEEE references |
+| P3 | Add Artifact Availability | Section 13 | ✅ COMPLETE | GitHub repo, reproduction |
+| P4 | Restructure: move status to appendix | Appendix B | ✅ COMPLETE | Implementation status tables |
+| P4 | Tighten Executive Summary | Section 1 | ✅ COMPLETE | Streamlined for academic |
+| **v2.7** | Add OTLP tracing to observability | Section 7.4 | ✅ COMPLETE | OpenTelemetry 0.21.0 |
+| **v2.7** | Add Criterion benchmarks | Section 7.4/8.5 | ✅ COMPLETE | Native Rust benchmarks |
 
 ---
 

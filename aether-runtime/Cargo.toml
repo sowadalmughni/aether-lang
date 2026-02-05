@@ -24,11 +24,12 @@ sha2 = "0.10"
 thiserror = { workspace = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-opentelemetry = "0.23"
-opentelemetry = "0.22"
-opentelemetry_sdk = { version = "0.22.1", features = ["rt-tokio"] }
-# opentelemetry-otlp temporarily removed to unblock build; will migrate later
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.23.0"
+opentelemetry = { version = "0.22.0", features = ["trace"] }
+opentelemetry_sdk = { version = "0.22.1", features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.15.0", features = ["trace", "grpc-tonic"] }
+# opentelemetry-jaeger removed
 prometheus = "0.13"
 axum = "0.7"
 tower = "0.4"
@@ -36,4 +37,3 @@ tower-http = { version = "0.5", features = ["cors"] }
 uuid = { version = "1.0", features = ["v4"] }
 async-trait = "0.1"
 regex = "1.10"
-

@@ -1,0 +1,51 @@
+name: OpenTelemetry Compatibility Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-otel-skew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check for duplicate OTEL versions
+        run: |
+          set -euo pipefail
+          cd aether-runtime
+          cargo tree -d > dupes.txt
+          
+          check_one_version() {
+            local crate="$1"
+            local count
+            count=$(grep -E "^${crate} v" dupes.txt | awk '{print $2}' | sort -u | wc -l | tr -d ' ')
+            if [ "${count}" -gt 1 ]; then
+              echo "Multiple versions detected for ${crate}"
+              grep -E "^${crate} v" dupes.txt || true
+              exit 1
+            fi
+          }
+
+          check_one_version "opentelemetry"
+          check_one_version "opentelemetry_sdk"
+          check_one_version "tracing-opentelemetry"
+
+      - name: Check for forbidden dependencies
+        run: |
+          cd aether-runtime
+          if cargo tree | grep -q "opentelemetry-jaeger"; then
+            echo "Forbidden dependency found: opentelemetry-jaeger"
+            exit 1
+          fi
+
+      - name: Run build and test
+        run: |
+          cd aether-runtime
+          cargo build
+          cargo test

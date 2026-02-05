@@ -182,6 +182,13 @@ mod dag_execution_response_tests {
             aborted: false,
             skipped_nodes: vec![],
             tokens_saved: 20,
+            node_latency_p50_ms: None,
+            node_latency_p95_ms: None,
+            node_latency_p99_ms: None,
+            level_latency_p50_ms: None,
+            level_latency_p95_ms: None,
+            level_latency_p99_ms: None,
+            sequential_mode: false,
         };
 
         let json = serde_json::to_string(&response).unwrap();

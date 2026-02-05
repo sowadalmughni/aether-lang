@@ -326,12 +326,11 @@ mod tests {
         assert!(cache.get(&key).is_none());
 
         // Store a response
-        let response = CachedResponse {
-            output: "Test output".to_string(),
-            token_cost: 10,
-            cache_key: key.hash(),
-            cached_at: current_timestamp(),
-        };
+        let response = CachedResponse::new(
+            "Test output".to_string(),
+            10,
+            key.hash(),
+        );
         cache.put(&key, response.clone());
 
         // Hit on second lookup
@@ -357,12 +356,11 @@ mod tests {
         // Fill cache
         for i in 0..3 {
             let key = CacheKey::new(format!("Prompt {}", i), "gpt-4o".to_string());
-            let response = CachedResponse {
-                output: format!("Output {}", i),
-                token_cost: 10,
-                cache_key: key.hash(),
-                cached_at: current_timestamp(),
-            };
+            let response = CachedResponse::new(
+                format!("Output {}", i),
+                10,
+                key.hash(),
+            );
             cache.put(&key, response);
         }
 
@@ -381,12 +379,11 @@ mod tests {
         let cache = LlmCache::new(config);
         let key = CacheKey::new("Test".to_string(), "gpt-4o".to_string());
 
-        let response = CachedResponse {
-            output: "Output".to_string(),
-            token_cost: 10,
-            cache_key: key.hash(),
-            cached_at: current_timestamp(),
-        };
+        let response = CachedResponse::new(
+            "Output".to_string(),
+            10,
+            key.hash(),
+        );
 
         cache.put(&key, response);
         assert!(cache.get(&key).is_none());
@@ -398,12 +395,11 @@ mod tests {
         let cache = LlmCache::with_defaults();
         let key = CacheKey::new("Test".to_string(), "gpt-4o".to_string());
 
-        let response = CachedResponse {
-            output: "Output".to_string(),
-            token_cost: 10,
-            cache_key: key.hash(),
-            cached_at: current_timestamp(),
-        };
+        let response = CachedResponse::new(
+            "Output".to_string(),
+            10,
+            key.hash(),
+        );
 
         cache.put(&key, response);
         assert_eq!(cache.len(), 1);

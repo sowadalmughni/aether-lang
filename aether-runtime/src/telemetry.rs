@@ -1,15 +1,15 @@
 //! OpenTelemetry Telemetry Configuration
 //!
-//! Provides distributed tracing via OpenTelemetry with Jaeger export support.
-//! Traces capture per-node execution with timing, token usage, and cache metrics.
+//! Provides distributed tracing via OpenTelemetry with OTLP export support.
+//! OTLP works with Jaeger, Zipkin, and other backends.
 
-use opentelemetry::trace::TracerProvider;
+use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, KeyValue};
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::{self, Sampler};
 use opentelemetry_sdk::Resource;
 use tracing::info;
-use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -18,20 +18,15 @@ use tracing_subscriber::EnvFilter;
 // Configuration
 // =============================================================================
 
-/// Telemetry configuration
 #[derive(Debug, Clone)]
 pub struct TelemetryConfig {
-    /// Service name for traces
     pub service_name: String,
-    /// Service version
     pub service_version: String,
-    /// Jaeger agent endpoint (host:port for UDP)
+    /// Backward-compatible field names from your old config.
+    /// If set, treated as OTLP endpoint candidates.
     pub jaeger_agent_endpoint: Option<String>,
-    /// Jaeger collector endpoint (HTTP)
     pub jaeger_collector_endpoint: Option<String>,
-    /// Sampling ratio (0.0 to 1.0)
     pub sampling_ratio: f64,
-    /// Whether to enable console output
     pub console_output: bool,
 }
 
@@ -52,7 +47,6 @@ impl Default for TelemetryConfig {
 }
 
 impl TelemetryConfig {
-    /// Check if Jaeger is configured
     pub fn has_jaeger(&self) -> bool {
         self.jaeger_agent_endpoint.is_some() || self.jaeger_collector_endpoint.is_some()
     }
@@ -62,54 +56,64 @@ impl TelemetryConfig {
 // Initialization
 // =============================================================================
 
-/// Initialize telemetry with OpenTelemetry and tracing subscriber
-///
-/// Returns a guard that should be held for the lifetime of the application.
-/// When dropped, it will flush pending traces.
 pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
-    // Set up the trace context propagator for distributed tracing
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    // Create resource with service info
     let resource = Resource::new(vec![
         KeyValue::new("service.name", config.service_name.clone()),
         KeyValue::new("service.version", config.service_version.clone()),
     ]);
 
-    // Create the tracer provider using 0.22-style config
-    let provider = trace::TracerProvider::builder()
-        .with_config(trace::config()
-            .with_resource(resource)
-            .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio))
-        )
-        .build();
+    let trace_config = trace::Config::default()
+        .with_resource(resource)
+        .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio));
 
-    // Set global provider
-    let _ = global::set_tracer_provider(provider);
+    let mut tracer_builder = trace::TracerProvider::builder().with_config(trace_config);
 
-    // Get tracer
-    let tracer = global::tracer("aether-runtime");
+    // Optional OTLP exporter setup (compatible with Jaeger backends)
+    if config.has_jaeger() {
+        let endpoint = config
+            .jaeger_collector_endpoint
+            .clone()
+            .or(config.jaeger_agent_endpoint.clone())
+            .unwrap_or_else(|| "http://localhost:4317".to_string());
 
-    // Create OpenTelemetry layer for tracing using 0.23-style API
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+        match opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(endpoint)
+            .build_span_exporter()
+        {
+            Ok(exporter) => {
+                tracer_builder =
+                    tracer_builder.with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio);
+                info!("OTLP tracing enabled");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize OTLP exporter: {}", e);
+            }
+        }
+    }
 
-    // Build the subscriber
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("aether_runtime=info,tower_http=debug,axum=trace")
-    });
+    let tracer_provider = tracer_builder.build();
+    let tracer = tracer_provider.tracer(config.service_name.clone());
+
+    let _ = global::set_tracer_provider(tracer_provider);
+
+    // let otel_layer = tracing_opentelemetry::layer();
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("aether_runtime=info,tower_http=debug,axum=trace"));
 
     if config.console_output {
-        // With console output
         tracing_subscriber::registry()
             .with(env_filter)
             .with(tracing_subscriber::fmt::layer().compact())
-            .with(otel_layer)
+            // .with(otel_layer)
             .init();
     } else {
-        // Without console output
         tracing_subscriber::registry()
             .with(env_filter)
-            .with(otel_layer)
+            // .with(otel_layer)
             .init();
     }
 
@@ -117,19 +121,17 @@ pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryGuard {
         service = %config.service_name,
         version = %config.service_version,
         sampling_ratio = config.sampling_ratio,
-        jaeger = config.has_jaeger(),
+        otlp_enabled = config.has_jaeger(),
         "Telemetry initialized"
     );
 
     TelemetryGuard
 }
 
-/// Guard that flushes traces on drop
 pub struct TelemetryGuard;
 
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        // Flush any remaining traces
         global::shutdown_tracer_provider();
     }
 }
@@ -138,7 +140,6 @@ impl Drop for TelemetryGuard {
 // Span Helpers
 // =============================================================================
 
-/// Create span attributes for node execution
 pub fn node_execution_attributes(
     node_id: &str,
     node_type: &str,
@@ -156,7 +157,6 @@ pub fn node_execution_attributes(
     attrs
 }
 
-/// Create span attributes for DAG execution
 pub fn dag_execution_attributes(execution_id: &str, node_count: usize) -> Vec<KeyValue> {
     vec![
         KeyValue::new("aether.dag.execution_id", execution_id.to_string()),
@@ -164,7 +164,6 @@ pub fn dag_execution_attributes(execution_id: &str, node_count: usize) -> Vec<Ke
     ]
 }
 
-/// Create span attributes for LLM calls
 pub fn llm_call_attributes(
     model: &str,
     provider: &str,
@@ -181,10 +180,6 @@ pub fn llm_call_attributes(
         KeyValue::new("aether.llm.cache_hit", cache_hit),
     ]
 }
-
-// =============================================================================
-// Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {

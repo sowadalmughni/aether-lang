@@ -755,7 +755,7 @@ mod tests {
 
         let response = client.complete(request).await.unwrap();
 
-        assert!(response.content.contains("Mock LLM Response"));
+        assert!(response.content.contains("[Mock Response]"));
         assert_eq!(response.provider, "mock");
         assert!(response.total_tokens > 0);
     }

@@ -258,7 +258,13 @@ fn get_execution_levels(dag: &Dag) -> Result<DagLevelInfo, String> {
     }
 
     // Group by level
-    let max_level = node_levels.values().max().copied().unwrap_or(0);
+    if node_levels.is_empty() {
+        return Ok(DagLevelInfo {
+            levels: Vec::new(),
+            node_levels,
+        });
+    }
+    let max_level = node_levels.values().max().copied().unwrap();
     let mut levels: Vec<Vec<String>> = vec![Vec::new(); max_level + 1];
 
     for (node_id, level) in &node_levels {

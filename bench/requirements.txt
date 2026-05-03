@@ -1,0 +1,19 @@
+# Aether benchmark Python dependencies.
+#
+# Note: bench/baselines/langchain_baseline.py and dspy_baseline.py are currently
+# stdlib-only behavioral stubs (they explicitly do NOT import langchain or dspy).
+# These dependencies are staged here so future real-baseline implementations can
+# land without a follow-up infra commit.
+#
+# Pinning policy: minor-range pins (>=X.Y, <X.Y+1) trade strict reproducibility
+# for patch-update flexibility. For artifact-evaluation reproducibility, pin to
+# exact ==X.Y.Z and regenerate as part of a release commit.
+
+langchain>=0.3,<0.4
+langchain-openai>=0.2,<0.3
+langchain-anthropic>=0.2,<0.3
+dspy-ai>=2.5,<3.0
+datasets>=2.20,<4.0
+numpy>=1.26,<3.0
+scipy>=1.13,<2.0
+httpx>=0.27,<1.0

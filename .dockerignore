@@ -1,0 +1,45 @@
+# Build artifacts (must not bloat the build context)
+target/
+**/target/
+**/node_modules/
+aether-dag-visualizer/dist/
+aether-dag-visualizer/.vite/
+docs/rustdoc/
+
+# Benchmark output (generated, not source)
+bench/results/
+
+# VCS / CI metadata not needed inside the image
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Editor / IDE / agent state
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python caches
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+.venv/
+venv/
+
+# Logs and ad-hoc debug dumps
+*.log
+check_error_full.txt
+check_output*.txt
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Docker / Compose state itself
+Dockerfile.*.bak
+docker-compose.override.yml

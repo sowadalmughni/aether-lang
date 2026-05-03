@@ -1,0 +1,14 @@
+# Force LF line endings for files executed inside Linux containers / CI runners.
+# Without this, Windows checkouts inflate them with CRLF, which can break shell
+# heredocs, pip parsing, and Docker RUN line continuations.
+
+* text=auto
+
+Dockerfile          text eol=lf
+.dockerignore       text eol=lf
+docker-compose.yml  text eol=lf
+*.sh                text eol=lf
+*.yaml              text eol=lf
+*.yml               text eol=lf
+requirements.txt    text eol=lf
+*.py                text eol=lf

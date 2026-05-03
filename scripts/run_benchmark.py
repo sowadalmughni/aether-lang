@@ -25,6 +25,9 @@ from typing import Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
+import numpy as np
+from scipy import stats as scipy_stats
+
 # Default runtime URL
 DEFAULT_RUNTIME_URL = os.environ.get("AETHER_RUNTIME_URL", "http://127.0.0.1:3000")
 
@@ -345,6 +348,193 @@ def run_benchmark_scenario(
     )
 
 
+SUITE_DATASETS = [
+    ("customer_support_100", "triage",     "bench/datasets/customer_support_100.jsonl"),
+    ("document_analysis_50", "extraction", "bench/datasets/document_analysis_50.jsonl"),
+]
+SUITE_CONFIGS = ["sequential", "parallel", "parallel_cached"]
+
+
+def _trial_percentiles(latencies: list[float]) -> tuple[float, float, float]:
+    if not latencies:
+        return 0.0, 0.0, 0.0
+    arr = np.asarray(latencies, dtype=float)
+    p50, p95, p99 = np.percentile(arr, [50, 95, 99], method="linear")
+    return float(p50), float(p95), float(p99)
+
+
+def run_config_trials(
+    runtime_url: str,
+    dataset_name: str,
+    config: str,
+    n_trials: int,
+    dataset_items: list[dict],
+    scenario: str,
+) -> list[dict]:
+    """Run N trials for one (dataset, config) tuple and return per-trial dicts."""
+    assert config in SUITE_CONFIGS, f"unknown config: {config}"
+    sequential = (config == "sequential")
+    trials: list[dict] = []
+
+    if config == "parallel_cached":
+        # Warm the cache once; later measured trials must NOT clear it.
+        clear_cache(runtime_url)
+        warmup = _run_single_trial(runtime_url, scenario, dataset_items, sequential=False)
+        if warmup["cache_hit_rate"] > 0.05:
+            raise RuntimeError(
+                f"parallel_cached warmup expected ~0% hit rate (cache freshly cleared) "
+                f"but saw {warmup['cache_hit_rate']:.3f} — cache state is leaking across runs"
+            )
+        for i in range(n_trials):
+            print(f"    trial {i+1}/{n_trials} (cached)...", flush=True)
+            trial = _run_single_trial(runtime_url, scenario, dataset_items, sequential=False)
+            trial["trial"] = i
+            p50, p95, p99 = _trial_percentiles(trial["latencies_ms"])
+            trial["p50"], trial["p95"], trial["p99"] = p50, p95, p99
+            trials.append(trial)
+        if trials and trials[0]["cache_hit_rate"] < 0.5:
+            raise RuntimeError(
+                f"parallel_cached first measured trial has hit_rate "
+                f"{trials[0]['cache_hit_rate']:.3f}; expected > 0.5 after warmup"
+            )
+    else:
+        for i in range(n_trials):
+            clear_cache(runtime_url)
+            print(f"    trial {i+1}/{n_trials} ({config})...", flush=True)
+            trial = _run_single_trial(runtime_url, scenario, dataset_items, sequential=sequential)
+            trial["trial"] = i
+            p50, p95, p99 = _trial_percentiles(trial["latencies_ms"])
+            trial["p50"], trial["p95"], trial["p99"] = p50, p95, p99
+            trials.append(trial)
+    return trials
+
+
+def _bootstrap_ci(per_trial_values: list[float]) -> dict:
+    """mean / std / 95% bootstrap CI for one metric across N trials."""
+    arr = np.asarray(per_trial_values, dtype=float)
+    n = len(arr)
+    mean = float(arr.mean()) if n > 0 else 0.0
+    std = float(arr.std(ddof=1)) if n > 1 else 0.0
+    notes: Optional[str] = None
+    if n < 2 or float(arr.std()) == 0.0:
+        ci = [mean, mean]
+        notes = "constant per-trial values; CI degenerate"
+    else:
+        try:
+            res = scipy_stats.bootstrap(
+                (arr,),
+                np.mean,
+                confidence_level=0.95,
+                n_resamples=10000,
+                method="BCa",
+                random_state=42,
+            )
+            ci = [float(res.confidence_interval.low), float(res.confidence_interval.high)]
+        except Exception as exc:
+            res = scipy_stats.bootstrap(
+                (arr,),
+                np.mean,
+                confidence_level=0.95,
+                n_resamples=10000,
+                method="percentile",
+                random_state=42,
+            )
+            ci = [float(res.confidence_interval.low), float(res.confidence_interval.high)]
+            notes = f"BCa failed ({exc.__class__.__name__}); used percentile fallback"
+    out = {"mean": mean, "std": std, "ci95": ci}
+    if notes:
+        out["notes"] = notes
+    return out
+
+
+def aggregate_trials(trials: list[dict]) -> dict:
+    """Aggregate per-trial scalars across trials with bootstrap CIs."""
+    metrics = {
+        "latency_p50_ms":      [t["p50"] for t in trials],
+        "latency_p95_ms":      [t["p95"] for t in trials],
+        "latency_p99_ms":      [t["p99"] for t in trials],
+        "cache_hit_rate":      [t["cache_hit_rate"] for t in trials],
+        "tokens_saved_total":  [float(t["tokens_saved"]) for t in trials],
+    }
+    return {name: _bootstrap_ci(vals) for name, vals in metrics.items()}
+
+
+def _trial_for_json(t: dict) -> dict:
+    """Slim per-trial dict for raw_trial_results."""
+    return {
+        "trial": t["trial"],
+        "latencies_ms": [round(x, 4) for x in t["latencies_ms"]],
+        "p50": round(t["p50"], 4),
+        "p95": round(t["p95"], 4),
+        "p99": round(t["p99"], 4),
+        "cache_hit_rate": round(t["cache_hit_rate"], 6),
+        "cache_hits": t["cache_hits"],
+        "cache_misses": t["cache_misses"],
+        "tokens_total": t["tokens_total"],
+        "tokens_saved": t["tokens_saved"],
+        "errors": t["errors"],
+        "parallelization_factor_mean": round(t["parallelization_factor_mean"], 4),
+        "level_execution_times_ms_mean": [round(x, 4) for x in t["level_execution_times_ms_mean"]],
+    }
+
+
+def run_suite(args) -> int:
+    """Run the full (dataset × config × N trials) suite and write JSON."""
+    if not check_runtime(args.runtime_url):
+        print(f"Error: Runtime not available at {args.runtime_url}", file=sys.stderr)
+        print("Start the runtime with: cd aether-runtime && cargo run --release", file=sys.stderr)
+        return 1
+
+    selected_configs = SUITE_CONFIGS if args.config == "all" else [args.config]
+    results = []
+
+    for dataset_name, scenario, rel_path in SUITE_DATASETS:
+        path = rel_path
+        if not os.path.isabs(path):
+            path = str(Path(__file__).resolve().parent.parent / rel_path)
+        if not os.path.exists(path):
+            print(f"Error: Dataset not found: {path}", file=sys.stderr)
+            return 1
+        dataset_items = load_dataset(path)
+
+        for config in selected_configs:
+            print(f"\n[{dataset_name} / {config}] running {args.trials} trials over {len(dataset_items)} items")
+            trials = run_config_trials(
+                args.runtime_url, dataset_name, config, args.trials, dataset_items, scenario
+            )
+            agg = aggregate_trials(trials)
+            entry = {
+                "dataset": dataset_name,
+                "config": config,
+                "trials": args.trials,
+                **agg,
+                "raw_trial_results": [_trial_for_json(t) for t in trials],
+            }
+            results.append(entry)
+            print(
+                f"  -> p50 {agg['latency_p50_ms']['mean']:.2f} ± {agg['latency_p50_ms']['std']:.2f} ms"
+                f" | p95 {agg['latency_p95_ms']['mean']:.2f} ± {agg['latency_p95_ms']['std']:.2f} ms"
+                f" | hit {agg['cache_hit_rate']['mean']:.3f}"
+            )
+
+    out = {
+        "system": "aether",
+        "version": "unknown",
+        "provider": os.environ.get("AETHER_PROVIDER", "mock"),
+        "hardware": {"cpu": "unknown", "ram_gb": 0, "os": "unknown"},
+        "datasets": [d[0] for d in SUITE_DATASETS],
+        "configs": list(selected_configs),
+        "trials_per_config": args.trials,
+        "results": results,
+    }
+    out_path = Path(args.output_json)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2)
+    print(f"\nWrote {out_path}")
+    return 0
+
+
 def run_baseline(baseline: str, num_requests: int) -> Optional[dict]:
     """Run a baseline benchmark using the baseline scripts."""
     script_path = Path(__file__).parent.parent / "bench" / "baselines" / f"{baseline}_baseline.py"
@@ -381,9 +571,23 @@ def main():
     parser.add_argument("--runtime-url", default=DEFAULT_RUNTIME_URL, help="Runtime URL")
     parser.add_argument("--output", help="Output directory for results")
     parser.add_argument("--dataset-dir", default="bench/datasets", help="Dataset directory")
-    
+    parser.add_argument("--suite", action="store_true",
+                        help="Run the full N-trial suite and emit aether_mock_v1.json")
+    parser.add_argument("--trials", type=int, default=5,
+                        help="Trials per (dataset, config) tuple in --suite mode")
+    parser.add_argument("--config", default="all",
+                        choices=SUITE_CONFIGS + ["all"],
+                        help="Restrict --suite to one config (default: all)")
+    parser.add_argument("--output-json", default="bench/results/aether_mock_v1.json",
+                        help="--suite JSON output path")
+    parser.add_argument("--output-md", default="bench/results/aether_mock_v1.md",
+                        help="--suite Markdown report output path")
+
     args = parser.parse_args()
-    
+
+    if args.suite:
+        sys.exit(run_suite(args))
+
     # Check runtime
     if not check_runtime(args.runtime_url):
         print(f"Error: Runtime not available at {args.runtime_url}", file=sys.stderr)

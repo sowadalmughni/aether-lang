@@ -89,8 +89,11 @@ def execute_dag(url: str, dag: dict, sequential: bool = False) -> dict:
     endpoint = f"{url}/execute"
     if sequential:
         endpoint += "?sequential=true"
-    
-    data = json.dumps(dag).encode("utf-8")
+
+    # Runtime's /execute expects {"dag": <dag>, "context": <map>}; sending
+    # the dag unwrapped returns HTTP 422 on every request.
+    payload = {"dag": dag}
+    data = json.dumps(payload).encode("utf-8")
     req = Request(endpoint, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
     

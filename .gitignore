@@ -60,6 +60,7 @@ ENV/
 .idea/
 .vscode/
 .vs/
+.claude/
 *.swp
 *.swo
 *~

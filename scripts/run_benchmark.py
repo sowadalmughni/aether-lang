@@ -123,21 +123,21 @@ def create_triage_dag(query: str, context: dict) -> dict:
         "nodes": [
             {
                 "id": "classify_urgency",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Classify the urgency of this customer query as Low, Medium, High, or Critical.\n\nQuery: {query}\n\nCustomer tier: {context.get('customer_tier', 'free')}\n\nRespond with only the urgency level.",
                 "dependencies": []
             },
             {
                 "id": "classify_category",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Classify this customer query into a category (authentication, billing, bug, feature-request, how-to, outage, security, etc.).\n\nQuery: {query}\n\nRespond with only the category.",
                 "dependencies": []
             },
             {
                 "id": "generate_response",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Generate a helpful customer support response for this query.\n\nQuery: {query}\nUrgency: {{{{node.classify_urgency.output}}}}\nCategory: {{{{node.classify_category.output}}}}\n\nProvide a concise, helpful response.",
                 "dependencies": ["classify_urgency", "classify_category"]
@@ -153,33 +153,140 @@ def create_extraction_dag(document: str) -> dict:
         "nodes": [
             {
                 "id": "extract_entities",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Extract all named entities from this document. Return as a JSON array of strings.\n\nDocument: {document}",
                 "dependencies": []
             },
             {
                 "id": "summarize",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Summarize this document in 2-3 sentences.\n\nDocument: {document}",
                 "dependencies": []
             },
             {
                 "id": "classify_domain",
-                "node_type": "LlmFn",
+                "node_type": "llm_fn",
                 "model": "gpt-4o-mini",
                 "prompt": f"Classify the domain of this document (e.g., technology, finance, medical, legal, etc.).\n\nDocument: {document}\n\nRespond with only the domain.",
                 "dependencies": []
             },
             {
                 "id": "combine_results",
-                "node_type": "Compute",
+                "node_type": "compute",
                 "prompt": "Combine: entities={{{{node.extract_entities.output}}}}, summary={{{{node.summarize.output}}}}, domain={{{{node.classify_domain.output}}}}",
                 "dependencies": ["extract_entities", "summarize", "classify_domain"]
             }
         ]
     }
+
+
+def _build_dag(scenario: str, item: dict) -> dict:
+    if scenario == "triage":
+        return create_triage_dag(item["query"], item.get("context", {}))
+    if scenario == "extraction":
+        return create_extraction_dag(item["document"])
+    raise ValueError(f"Unknown scenario: {scenario}")
+
+
+def _run_single_trial(
+    runtime_url: str,
+    scenario: str,
+    dataset_items: list[dict],
+    sequential: bool,
+) -> dict:
+    """Execute one full pass over ``dataset_items`` and return raw measurements.
+
+    Caller owns cache state setup before calling — this function only reads
+    /cache/stats deltas; it does not clear the cache itself.
+    """
+    initial_stats = get_cache_stats(runtime_url)
+
+    latencies: list[float] = []
+    tokens_total = 0
+    tokens_saved = 0
+    parallelization_factors: list[float] = []
+    level_times_per_request: list[list[float]] = []
+    successful = 0
+    failed = 0
+
+    start_time = time.perf_counter()
+    for item in dataset_items:
+        try:
+            dag = _build_dag(scenario, item)
+            result = execute_dag(runtime_url, dag, sequential=sequential)
+            latencies.append(result.get("total_execution_time_ms", result.get("client_latency_ms", 0)))
+            tokens_total += result.get("total_tokens", 0) or 0
+            tokens_saved += result.get("tokens_saved", 0) or 0
+            pf = result.get("parallelization_factor")
+            if pf is not None:
+                parallelization_factors.append(float(pf))
+            lvls = result.get("level_execution_times_ms")
+            if lvls:
+                level_times_per_request.append([float(x) for x in lvls])
+            successful += 1
+        except Exception as e:
+            print(f"Request failed: {e}", file=sys.stderr)
+            failed += 1
+    total_time_ms = (time.perf_counter() - start_time) * 1000
+
+    final_stats = get_cache_stats(runtime_url)
+    cache_hits = final_stats.get("hits", 0) - initial_stats.get("hits", 0)
+    cache_misses = final_stats.get("misses", 0) - initial_stats.get("misses", 0)
+    cache_hit_rate = (
+        cache_hits / (cache_hits + cache_misses)
+        if (cache_hits + cache_misses) > 0
+        else 0.0
+    )
+
+    if level_times_per_request:
+        max_levels = max(len(v) for v in level_times_per_request)
+        sums = [0.0] * max_levels
+        counts = [0] * max_levels
+        for vec in level_times_per_request:
+            for i, t in enumerate(vec):
+                sums[i] += t
+                counts[i] += 1
+        level_execution_times_ms_mean = [
+            (sums[i] / counts[i]) if counts[i] else 0.0 for i in range(max_levels)
+        ]
+    else:
+        level_execution_times_ms_mean = []
+
+    parallelization_factor_mean = (
+        sum(parallelization_factors) / len(parallelization_factors)
+        if parallelization_factors
+        else (1.0 if sequential else 0.0)
+    )
+
+    return {
+        "latencies_ms": latencies,
+        "tokens_total": tokens_total,
+        "tokens_saved": tokens_saved,
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+        "cache_hit_rate": cache_hit_rate,
+        "errors": failed,
+        "successful": successful,
+        "total_time_ms": total_time_ms,
+        "parallelization_factor_mean": parallelization_factor_mean,
+        "level_execution_times_ms_mean": level_execution_times_ms_mean,
+    }
+
+
+def _percentiles_simple(latencies: list[float]) -> tuple[float, float, float]:
+    if not latencies:
+        return 0.0, 0.0, 0.0
+    s = sorted(latencies)
+    n = len(s)
+    if n == 1:
+        return s[0], s[0], s[0]
+    return (
+        s[int(0.50 * (n - 1))],
+        s[int(0.95 * (n - 1))],
+        s[int(0.99 * (n - 1))],
+    )
 
 
 def run_benchmark_scenario(
@@ -190,98 +297,46 @@ def run_benchmark_scenario(
     sequential: bool = False,
     cold_start: bool = False
 ) -> BenchmarkResult:
-    """Run a single benchmark scenario."""
-    
-    # Load dataset
+    """Run a single benchmark scenario (legacy single-trial wrapper)."""
+
     data = load_dataset(dataset_path)
     if num_requests > len(data):
-        # Cycle through dataset if needed
         data = (data * ((num_requests // len(data)) + 1))[:num_requests]
     else:
         data = data[:num_requests]
-    
-    # Clear cache for cold start
+
     if cold_start:
         clear_cache(runtime_url)
-    
-    # Get initial cache stats
-    initial_stats = get_cache_stats(runtime_url)
-    
-    # Execute requests
-    latencies = []
-    tokens_total = 0
-    tokens_saved = 0
-    successful = 0
-    failed = 0
-    
-    start_time = time.perf_counter()
-    
-    for item in data:
-        try:
-            if scenario == "triage":
-                dag = create_triage_dag(item["query"], item.get("context", {}))
-            elif scenario == "extraction":
-                dag = create_extraction_dag(item["document"])
-            else:
-                raise ValueError(f"Unknown scenario: {scenario}")
-            
-            result = execute_dag(runtime_url, dag, sequential=sequential)
-            
-            latencies.append(result.get("total_execution_time_ms", result.get("client_latency_ms", 0)))
-            tokens_total += result.get("total_tokens", 0)
-            tokens_saved += result.get("tokens_saved", 0)
-            successful += 1
-            
-        except Exception as e:
-            print(f"Request failed: {e}", file=sys.stderr)
-            failed += 1
-    
-    total_time_ms = (time.perf_counter() - start_time) * 1000
-    
-    # Get final cache stats
-    final_stats = get_cache_stats(runtime_url)
-    cache_hits = final_stats.get("hits", 0) - initial_stats.get("hits", 0)
-    cache_misses = final_stats.get("misses", 0) - initial_stats.get("misses", 0)
-    cache_hit_rate = cache_hits / (cache_hits + cache_misses) if (cache_hits + cache_misses) > 0 else 0.0
-    
-    # Compute percentiles
-    if latencies:
-        latencies_sorted = sorted(latencies)
-        n = len(latencies_sorted)
-        p50 = latencies_sorted[int(0.50 * (n - 1))] if n > 1 else latencies_sorted[0]
-        p95 = latencies_sorted[int(0.95 * (n - 1))] if n > 1 else latencies_sorted[0]
-        p99 = latencies_sorted[int(0.99 * (n - 1))] if n > 1 else latencies_sorted[0]
-    else:
-        p50 = p95 = p99 = 0.0
-    
-    # Determine mode
+
+    trial = _run_single_trial(runtime_url, scenario, data, sequential=sequential)
+    p50, p95, p99 = _percentiles_simple(trial["latencies_ms"])
+
     if cold_start:
         mode = "cold"
     elif sequential:
         mode = "sequential"
     else:
         mode = "parallel"
-    
-    # Parallelization factor (3 parallel nodes in extraction, 2 in triage)
+
     expected_parallel = 3 if scenario == "extraction" else 2
     parallelization_factor = expected_parallel if not sequential else 1.0
-    
+
     return BenchmarkResult(
         scenario=scenario,
         mode=mode,
         provider=os.environ.get("AETHER_PROVIDER", "mock"),
         requests=num_requests,
-        successful=successful,
-        failed=failed,
+        successful=trial["successful"],
+        failed=trial["errors"],
         latency_p50_ms=round(p50, 2),
         latency_p95_ms=round(p95, 2),
         latency_p99_ms=round(p99, 2),
-        total_time_ms=round(total_time_ms, 2),
-        tokens_total=tokens_total,
-        tokens_saved=tokens_saved,
-        cache_hits=cache_hits,
-        cache_misses=cache_misses,
-        cache_hit_rate=round(cache_hit_rate, 4),
+        total_time_ms=round(trial["total_time_ms"], 2),
+        tokens_total=trial["tokens_total"],
+        tokens_saved=trial["tokens_saved"],
+        cache_hits=trial["cache_hits"],
+        cache_misses=trial["cache_misses"],
+        cache_hit_rate=round(trial["cache_hit_rate"], 4),
         parallelization_factor=parallelization_factor,
         measured_at=datetime.utcnow().isoformat() + "Z",
         runtime_url=runtime_url,

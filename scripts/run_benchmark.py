@@ -651,9 +651,75 @@ def run_suite(args) -> int:
         json.dump(out, f, indent=2)
     print(f"\nWrote {out_path}")
 
+    md_path = Path(args.output_md)
+    emit_markdown_report(out, md_path)
+    print(f"Wrote {md_path}")
+
     if spawned is not None:
         _shutdown_runtime(spawned)
     return 0
+
+
+def _fmt_cell(metric: dict, decimals: int = 2) -> str:
+    mean = metric["mean"]
+    std = metric["std"]
+    lo, hi = metric["ci95"]
+    return f"{mean:.{decimals}f} ± {std:.{decimals}f} [{lo:.{decimals}f}, {hi:.{decimals}f}]"
+
+
+def emit_markdown_report(data: dict, path: Path) -> None:
+    short_sha = (data.get("version") or "unknown")[:12]
+    hw = data.get("hardware", {})
+    lines: list[str] = []
+    lines.append(f"# Aether benchmark results — {data.get('system','aether')}")
+    lines.append("")
+    lines.append(f"- **Provider:** {data.get('provider','?')}")
+    lines.append(f"- **Version (git SHA):** `{short_sha}`")
+    lines.append(f"- **CPU:** {hw.get('cpu','unknown')}")
+    lines.append(f"- **RAM:** {hw.get('ram_gb','?')} GiB")
+    lines.append(f"- **OS:** {hw.get('os','unknown')}")
+    lines.append(f"- **Trials per config:** {data.get('trials_per_config','?')}")
+    lines.append(f"- **Measured at (UTC):** {data.get('measured_at','?')}")
+    lines.append("")
+
+    by_dataset: dict[str, list[dict]] = {}
+    for r in data.get("results", []):
+        by_dataset.setdefault(r["dataset"], []).append(r)
+
+    for dataset_name, rows in by_dataset.items():
+        lines.append(f"## Dataset: `{dataset_name}`")
+        lines.append("")
+        lines.append("| Config | Trials | p50 (ms) | p95 (ms) | p99 (ms) | Cache hit rate | Tokens saved (total) |")
+        lines.append("| --- | ---: | --- | --- | --- | --- | --- |")
+        for r in rows:
+            lines.append("| " + " | ".join([
+                f"`{r['config']}`",
+                str(r["trials"]),
+                _fmt_cell(r["latency_p50_ms"], 2),
+                _fmt_cell(r["latency_p95_ms"], 2),
+                _fmt_cell(r["latency_p99_ms"], 2),
+                _fmt_cell(r["cache_hit_rate"], 4),
+                _fmt_cell(r["tokens_saved_total"], 1),
+            ]) + " |")
+        lines.append("")
+
+    lines.append("## Methodology")
+    lines.append("")
+    lines.append(
+        f"Each (dataset, config) tuple was measured over {data.get('trials_per_config','?')} "
+        "independent trials of the full dataset. `sequential` and `parallel` clear the runtime "
+        "cache before every trial; `parallel_cached` warms the cache once with a discarded "
+        "warmup pass and then runs the measured trials without further clears. Per-request "
+        "latencies feed per-trial p50/p95/p99 (`numpy.percentile`, linear method); cell entries "
+        "are `mean ± std [95% CI]` aggregated across the per-trial scalars via "
+        "`scipy.stats.bootstrap` (BCa, 10 000 resamples, seed=42; percentile fallback when BCa "
+        "errors on degenerate variance). The mock provider is deterministic, so trial-to-trial "
+        "variance reflects scheduling and HTTP-loopback jitter only."
+    )
+    lines.append("")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def run_baseline(baseline: str, num_requests: int) -> Optional[dict]:

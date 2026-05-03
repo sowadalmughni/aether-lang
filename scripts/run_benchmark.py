@@ -12,8 +12,11 @@ Usage:
 """
 
 import argparse
+import atexit
 import json
 import os
+import platform
+import signal
 import statistics
 import subprocess
 import sys
@@ -355,6 +358,110 @@ SUITE_DATASETS = [
 SUITE_CONFIGS = ["sequential", "parallel", "parallel_cached"]
 
 
+def get_git_version(repo_root: Path) -> str:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(repo_root), capture_output=True, text=True, timeout=10,
+        ).stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def get_hardware_info() -> dict:
+    """Best-effort hardware snapshot. Linux/WSL reads /proc; other OSes
+    fall back to platform module."""
+    cpu = "unknown"
+    ram_gb = 0.0
+    os_str = platform.platform()
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.lower().startswith("model name"):
+                    cpu = line.split(":", 1)[1].strip()
+                    break
+    except Exception:
+        cpu = platform.processor() or "unknown"
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    ram_gb = round(kb / (1024 * 1024), 2)
+                    break
+    except Exception:
+        pass
+    try:
+        with open("/etc/os-release", "r") as f:
+            for line in f:
+                if line.startswith("PRETTY_NAME="):
+                    os_str = line.split("=", 1)[1].strip().strip('"')
+                    break
+    except Exception:
+        pass
+    return {"cpu": cpu, "ram_gb": ram_gb, "os": os_str}
+
+
+def _wait_for_runtime(url: str, timeout_s: float = 180.0) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if check_runtime(url):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def _shutdown_runtime(proc: Optional[subprocess.Popen]) -> None:
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    except Exception as exc:
+        print(f"runtime shutdown error: {exc}", file=sys.stderr)
+
+
+def launch_runtime(repo_root: Path, url: str, timeout_s: float = 180.0) -> subprocess.Popen:
+    """Spawn cargo run --release -p aether-runtime with mock provider, wait
+    for /health, register cleanup. Caller owns the returned Popen handle but
+    atexit will also try to shut it down."""
+    env = {**os.environ, "AETHER_PROVIDER": "mock"}
+    print(f"Spawning runtime via cargo (cwd={repo_root})...", flush=True)
+    proc = subprocess.Popen(
+        ["cargo", "run", "--release", "-p", "aether-runtime"],
+        cwd=str(repo_root),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    atexit.register(_shutdown_runtime, proc)
+    for sig_name in ("SIGINT", "SIGTERM"):
+        if hasattr(signal, sig_name):
+            try:
+                signal.signal(getattr(signal, sig_name),
+                              lambda *_: (_shutdown_runtime(proc), sys.exit(130)))
+            except (ValueError, OSError):
+                pass
+
+    if not _wait_for_runtime(url, timeout_s=timeout_s):
+        _shutdown_runtime(proc)
+        # Drain any captured output so the operator sees why it failed.
+        try:
+            tail = proc.stdout.read() if proc.stdout else ""
+        except Exception:
+            tail = ""
+        raise RuntimeError(
+            f"runtime did not become healthy at {url} within {timeout_s}s\n--- runtime output (tail) ---\n{tail[-4000:]}"
+        )
+    print(f"Runtime is healthy at {url}", flush=True)
+    return proc
+
+
 def _trial_percentiles(latencies: list[float]) -> tuple[float, float, float]:
     if not latencies:
         return 0.0, 0.0, 0.0
@@ -480,9 +587,19 @@ def _trial_for_json(t: dict) -> dict:
 
 def run_suite(args) -> int:
     """Run the full (dataset × config × N trials) suite and write JSON."""
-    if not check_runtime(args.runtime_url):
-        print(f"Error: Runtime not available at {args.runtime_url}", file=sys.stderr)
-        print("Start the runtime with: cd aether-runtime && cargo run --release", file=sys.stderr)
+    repo_root = Path(__file__).resolve().parent.parent
+    spawned: Optional[subprocess.Popen] = None
+    try:
+        if check_runtime(args.runtime_url):
+            print(f"Reusing already-running runtime at {args.runtime_url}", flush=True)
+        elif args.no_autostart:
+            print(f"Error: Runtime not available at {args.runtime_url} and --no-autostart was set", file=sys.stderr)
+            print("Start the runtime with: cd aether-runtime && cargo run --release", file=sys.stderr)
+            return 1
+        else:
+            spawned = launch_runtime(repo_root, args.runtime_url)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     selected_configs = SUITE_CONFIGS if args.config == "all" else [args.config]
@@ -519,12 +636,13 @@ def run_suite(args) -> int:
 
     out = {
         "system": "aether",
-        "version": "unknown",
+        "version": get_git_version(repo_root),
         "provider": os.environ.get("AETHER_PROVIDER", "mock"),
-        "hardware": {"cpu": "unknown", "ram_gb": 0, "os": "unknown"},
+        "hardware": get_hardware_info(),
         "datasets": [d[0] for d in SUITE_DATASETS],
         "configs": list(selected_configs),
         "trials_per_config": args.trials,
+        "measured_at": datetime.utcnow().isoformat() + "Z",
         "results": results,
     }
     out_path = Path(args.output_json)
@@ -532,6 +650,9 @@ def run_suite(args) -> int:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)
     print(f"\nWrote {out_path}")
+
+    if spawned is not None:
+        _shutdown_runtime(spawned)
     return 0
 
 
@@ -582,6 +703,8 @@ def main():
                         help="--suite JSON output path")
     parser.add_argument("--output-md", default="bench/results/aether_mock_v1.md",
                         help="--suite Markdown report output path")
+    parser.add_argument("--no-autostart", action="store_true",
+                        help="In --suite mode, do not spawn the runtime; assume operator started it")
 
     args = parser.parse_args()
 

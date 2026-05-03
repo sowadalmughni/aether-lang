@@ -136,7 +136,12 @@ impl LlmResponse {
 // =============================================================================
 // OpenAI API Types
 // =============================================================================
+// These are only constructed/consumed when the `llm-api` feature is enabled
+// (see Cargo.toml). Without it they are dead code, but the dead-code lint
+// triggers a rustc ICE in check_mod_deathness on stable 1.94/1.95, so we
+// silence it explicitly per struct.
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct OpenAIRequest {
     model: String,
@@ -147,12 +152,14 @@ struct OpenAIRequest {
     max_tokens: Option<u32>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct OpenAIMessage {
     role: String,
     content: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct OpenAIResponse {
     choices: Vec<OpenAIChoice>,
@@ -160,11 +167,13 @@ struct OpenAIResponse {
     model: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct OpenAIChoice {
     message: OpenAIMessage,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct OpenAIUsage {
     prompt_tokens: u32,
@@ -342,12 +351,16 @@ impl LlmClient for MockLlmClient {
 
         // Check if we should fail
         if self.should_fail {
-            return Err(LlmError::RequestFailed("Mock failure mode enabled".to_string()));
+            return Err(LlmError::RequestFailed(
+                "Mock failure mode enabled".to_string(),
+            ));
         }
 
         // Check fail_n_times logic
         if self.fail_until > 0 {
-            let count = self.fail_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let count = self
+                .fail_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if count < self.fail_until {
                 return Err(LlmError::RequestFailed(format!(
                     "Mock failure {}/{} (will succeed after {} more attempts)",
@@ -667,17 +680,25 @@ pub fn create_client(config: &LlmConfig, model: &str) -> Box<dyn LlmClient> {
             #[cfg(feature = "llm-api")]
             LlmProvider::OpenAI => {
                 if let Some(api_key) = &config.openai_api_key {
-                    info!("AETHER_PROVIDER=openai, using OpenAI API for model: {}", model);
+                    info!(
+                        "AETHER_PROVIDER=openai, using OpenAI API for model: {}",
+                        model
+                    );
                     return Box::new(real::OpenAIClient::new(api_key.clone()));
                 } else {
-                    warn!("AETHER_PROVIDER=openai but OPENAI_API_KEY not set, falling back to mock");
+                    warn!(
+                        "AETHER_PROVIDER=openai but OPENAI_API_KEY not set, falling back to mock"
+                    );
                     return Box::new(MockLlmClient::new());
                 }
             }
             #[cfg(feature = "llm-api")]
             LlmProvider::Anthropic => {
                 if let Some(api_key) = &config.anthropic_api_key {
-                    info!("AETHER_PROVIDER=anthropic, using Anthropic API for model: {}", model);
+                    info!(
+                        "AETHER_PROVIDER=anthropic, using Anthropic API for model: {}",
+                        model
+                    );
                     return Box::new(real::AnthropicClient::new(api_key.clone()));
                 } else {
                     warn!("AETHER_PROVIDER=anthropic but ANTHROPIC_API_KEY not set, falling back to mock");
@@ -816,7 +837,10 @@ mod tests {
             forced_provider: Some(LlmProvider::Anthropic),
             ..config.clone()
         };
-        assert_eq!(config_anthropic.forced_provider, Some(LlmProvider::Anthropic));
+        assert_eq!(
+            config_anthropic.forced_provider,
+            Some(LlmProvider::Anthropic)
+        );
     }
 
     #[tokio::test]

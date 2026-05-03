@@ -1,0 +1,43 @@
+# Aether runtime + benchmark services.
+# Build once with `docker compose build`, then either:
+#   - `docker compose up runtime`        (interactive runtime)
+#   - `docker compose run --rm bench`    (one-shot benchmark)
+#
+# Both services share the single image built from ./Dockerfile.
+
+services:
+  runtime:
+    build: .
+    image: aether:latest
+    container_name: aether-runtime
+    ports:
+      - "3000:3000"
+    environment:
+      AETHER_PROVIDER: mock
+      RUST_LOG: info
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  bench:
+    image: aether:latest
+    container_name: aether-bench
+    depends_on:
+      runtime:
+        condition: service_healthy
+    environment:
+      AETHER_PROVIDER: mock
+      AETHER_RUNTIME_URL: http://runtime:3000
+    volumes:
+      # Benchmark output lands on the host so JSON files in bench/results/
+      # remain reachable for whitepaper backing data without docker cp.
+      - ./bench/results:/aether/bench/results
+    command: >
+      python scripts/run_benchmark.py
+      --all
+      --requests 100
+      --runtime-url http://runtime:3000
+      --output bench/results/

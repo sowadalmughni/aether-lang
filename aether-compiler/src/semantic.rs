@@ -36,10 +36,7 @@ const MAX_ERRORS: usize = 10;
 #[derive(Debug, Error, Clone)]
 pub enum SemanticError {
     #[error("{message}")]
-    Generic {
-        message: String,
-        span: Span,
-    },
+    Generic { message: String, span: Span },
 
     #[error("Undefined symbol '{name}' at line {line}, column {column}{suggestion}")]
     UndefinedSymbol {
@@ -59,7 +56,9 @@ pub enum SemanticError {
         first_line: usize,
     },
 
-    #[error("Type mismatch: expected '{expected}', found '{found}' at line {line}, column {column}")]
+    #[error(
+        "Type mismatch: expected '{expected}', found '{found}' at line {line}, column {column}"
+    )]
     TypeMismatch {
         expected: String,
         found: String,
@@ -91,10 +90,7 @@ pub enum SemanticError {
     },
 
     #[error("Circular dependency detected involving: {nodes}")]
-    CircularDependency {
-        nodes: String,
-        span: Span,
-    },
+    CircularDependency { nodes: String, span: Span },
 
     #[error("Flow '{flow_name}' calls undefined function '{fn_name}' at line {line}, column {column}{suggestion}")]
     UndefinedFunction {
@@ -207,7 +203,11 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
     for i in 1..=a_len {
         for j in 1..=b_len {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             matrix[i][j] = (matrix[i - 1][j] + 1)
                 .min(matrix[i][j - 1] + 1)
                 .min(matrix[i - 1][j - 1] + cost);
@@ -429,7 +429,7 @@ impl SymbolTable {
 
     /// Check if a symbol exists in the current scope only.
     pub fn exists_in_current_scope(&self, name: &str) -> bool {
-        self.scopes.last().map_or(false, |s| s.contains_key(name))
+        self.scopes.last().is_some_and(|s| s.contains_key(name))
     }
 
     /// Get all symbols in the global (outermost) scope.
@@ -450,13 +450,11 @@ impl SymbolTable {
         self.scopes
             .iter()
             .flat_map(|scope| {
-                scope.iter().filter_map(|(name, sym)| {
-                    match &sym.kind {
-                        SymbolKind::LlmFn { .. }
-                        | SymbolKind::Function { .. }
-                        | SymbolKind::Flow { .. } => Some(name.as_str()),
-                        _ => None,
-                    }
+                scope.iter().filter_map(|(name, sym)| match &sym.kind {
+                    SymbolKind::LlmFn { .. }
+                    | SymbolKind::Function { .. }
+                    | SymbolKind::Flow { .. } => Some(name.as_str()),
+                    _ => None,
                 })
             })
             .collect()
@@ -1020,8 +1018,7 @@ impl SemanticAnalyzer {
         let (line, _) = self.line_col(span);
 
         // Check for context.KEY pattern
-        if var_name.starts_with("context.") {
-            let key = &var_name["context.".len()..];
+        if let Some(key) = var_name.strip_prefix("context.") {
             // Context references are validated at runtime for now
             // Could add context type checking in future
             if key.is_empty() {
@@ -1108,7 +1105,13 @@ impl SemanticAnalyzer {
 
         // Analyze flow body statements
         for stmt in &def.body.stmts {
-            self.analyze_flow_stmt(&flow_name, stmt, &mut calls, &mut local_types, &declared_return);
+            self.analyze_flow_stmt(
+                &flow_name,
+                stmt,
+                &mut calls,
+                &mut local_types,
+                &declared_return,
+            );
             if !self.should_continue() {
                 break;
             }
@@ -1128,7 +1131,11 @@ impl SemanticAnalyzer {
     ) {
         match stmt {
             Stmt::Let {
-                name, ty, value, span, ..
+                name,
+                ty,
+                value,
+                span,
+                ..
             } => {
                 // Infer type from RHS
                 let inferred_type = self.infer_expr_type(value, local_types);
@@ -1136,7 +1143,9 @@ impl SemanticAnalyzer {
                 // If explicit type annotation, check compatibility
                 let final_type = if let Some(explicit_ty) = ty {
                     let explicit = TypeInfo::from_ast_type(explicit_ty);
-                    if !inferred_type.is_compatible_with(&explicit) && inferred_type != TypeInfo::Unknown {
+                    if !inferred_type.is_compatible_with(&explicit)
+                        && inferred_type != TypeInfo::Unknown
+                    {
                         let (line, col) = self.line_col(span);
                         self.add_error(SemanticError::TypeMismatch {
                             expected: explicit.to_string(),
@@ -1152,7 +1161,9 @@ impl SemanticAnalyzer {
                 };
 
                 // Extract function calls
-                if let Some(call) = self.extract_call(flow_name, value, Some(name.node.clone()), span, local_types) {
+                if let Some(call) =
+                    self.extract_call(flow_name, value, Some(name.node.clone()), span, local_types)
+                {
                     calls.push(call);
                 }
 
@@ -1169,7 +1180,9 @@ impl SemanticAnalyzer {
             Stmt::Return { value, span } => {
                 if let Some(ret_expr) = value {
                     let ret_type = self.infer_expr_type(ret_expr, local_types);
-                    if !ret_type.is_compatible_with(declared_return) && ret_type != TypeInfo::Unknown {
+                    if !ret_type.is_compatible_with(declared_return)
+                        && ret_type != TypeInfo::Unknown
+                    {
                         let (line, col) = self.line_col(span);
                         self.add_error(SemanticError::TypeMismatch {
                             expected: declared_return.to_string(),
@@ -1198,7 +1211,9 @@ impl SemanticAnalyzer {
             } => {
                 // Validate condition is boolean
                 let cond_type = self.infer_expr_type(condition, local_types);
-                if cond_type != TypeInfo::Primitive(PrimitiveType::Bool) && cond_type != TypeInfo::Unknown {
+                if cond_type != TypeInfo::Primitive(PrimitiveType::Bool)
+                    && cond_type != TypeInfo::Unknown
+                {
                     let (line, col) = self.line_col(condition.span());
                     self.add_error(SemanticError::TypeMismatch {
                         expected: "bool".to_string(),
@@ -1222,7 +1237,9 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Stmt::For { var, iter, body, .. } => {
+            Stmt::For {
+                var, iter, body, ..
+            } => {
                 // Infer iterator type
                 let iter_type = self.infer_expr_type(iter, local_types);
                 let elem_type = match iter_type {
@@ -1238,7 +1255,9 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Stmt::While { condition, body, .. } => {
+            Stmt::While {
+                condition, body, ..
+            } => {
                 let _ = self.infer_expr_type(condition, local_types);
                 for s in &body.stmts {
                     self.analyze_flow_stmt(flow_name, s, calls, local_types, declared_return);
@@ -1289,7 +1308,11 @@ impl SemanticAnalyzer {
     // Type inference
     // -------------------------------------------------------------------------
 
-    fn infer_expr_type(&mut self, expr: &Expr, local_types: &HashMap<String, TypeInfo>) -> TypeInfo {
+    fn infer_expr_type(
+        &mut self,
+        expr: &Expr,
+        local_types: &HashMap<String, TypeInfo>,
+    ) -> TypeInfo {
         match expr {
             Expr::Literal { value, .. } => match value {
                 Literal::String(_) => TypeInfo::Primitive(PrimitiveType::String),
@@ -1326,18 +1349,29 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expr::Binary { left, op, right, span } => {
+            Expr::Binary {
+                left,
+                op,
+                right,
+                span,
+            } => {
                 let left_ty = self.infer_expr_type(left, local_types);
                 let right_ty = self.infer_expr_type(right, local_types);
 
                 match op {
                     // Comparison ops return bool
-                    BinaryOp::Eq | BinaryOp::NotEq | BinaryOp::Lt | BinaryOp::Gt
-                    | BinaryOp::LtEq | BinaryOp::GtEq => TypeInfo::Primitive(PrimitiveType::Bool),
+                    BinaryOp::Eq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::Gt
+                    | BinaryOp::LtEq
+                    | BinaryOp::GtEq => TypeInfo::Primitive(PrimitiveType::Bool),
 
                     // Logical ops require bool, return bool
                     BinaryOp::And | BinaryOp::Or => {
-                        if left_ty != TypeInfo::Primitive(PrimitiveType::Bool) && left_ty != TypeInfo::Unknown {
+                        if left_ty != TypeInfo::Primitive(PrimitiveType::Bool)
+                            && left_ty != TypeInfo::Unknown
+                        {
                             let (line, col) = self.line_col(left.span());
                             self.add_error(SemanticError::TypeMismatch {
                                 expected: "bool".to_string(),
@@ -1351,7 +1385,11 @@ impl SemanticAnalyzer {
                     }
 
                     // Arithmetic ops
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod => {
                         // String concatenation
                         if left_ty == TypeInfo::Primitive(PrimitiveType::String) {
                             return TypeInfo::Primitive(PrimitiveType::String);
@@ -1384,13 +1422,23 @@ impl SemanticAnalyzer {
                 // Look up function
                 if let Some(sym) = self.context.symbols.lookup(&fn_name) {
                     let (params, return_type) = match &sym.kind {
-                        SymbolKind::LlmFn { params, return_type } => (params.clone(), return_type.clone()),
-                        SymbolKind::Function { params, return_type } => {
-                            (params.clone(), return_type.clone().unwrap_or(TypeInfo::Unit))
-                        }
-                        SymbolKind::Flow { params, return_type } => (params.clone(), return_type.clone()),
+                        SymbolKind::LlmFn {
+                            params,
+                            return_type,
+                        } => (params.clone(), return_type.clone()),
+                        SymbolKind::Function {
+                            params,
+                            return_type,
+                        } => (
+                            params.clone(),
+                            return_type.clone().unwrap_or(TypeInfo::Unit),
+                        ),
+                        SymbolKind::Flow {
+                            params,
+                            return_type,
+                        } => (params.clone(), return_type.clone()),
                         _ => {
-                            let (line, col) = self.line_col(span);
+                            let (_line, _col) = self.line_col(span);
                             self.add_error(SemanticError::Generic {
                                 message: format!("'{}' is not a callable function", fn_name),
                                 span: span.clone(),
@@ -1443,7 +1491,11 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expr::FieldAccess { object, field, span } => {
+            Expr::FieldAccess {
+                object,
+                field,
+                span,
+            } => {
                 let obj_ty = self.infer_expr_type(object, local_types);
 
                 match &obj_ty {
@@ -1451,7 +1503,8 @@ impl SemanticAnalyzer {
                         // Look up struct definition
                         if let Some(sym) = self.context.symbols.lookup(name) {
                             if let SymbolKind::Struct { fields } = &sym.kind {
-                                if let Some((_, ty)) = fields.iter().find(|(n, _)| n == &field.node) {
+                                if let Some((_, ty)) = fields.iter().find(|(n, _)| n == &field.node)
+                                {
                                     return ty.clone();
                                 } else {
                                     let (line, _) = self.line_col(span);
@@ -1480,7 +1533,11 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expr::Index { object, index, span } => {
+            Expr::Index {
+                object,
+                index,
+                span,
+            } => {
                 let obj_ty = self.infer_expr_type(object, local_types);
                 let _ = self.infer_expr_type(index, local_types);
 
@@ -1489,7 +1546,7 @@ impl SemanticAnalyzer {
                     TypeInfo::Map(_, value) => *value,
                     TypeInfo::Unknown => TypeInfo::Unknown,
                     _ => {
-                        let (line, _) = self.line_col(span);
+                        let (_line, _) = self.line_col(span);
                         self.add_error(SemanticError::Generic {
                             message: format!("Cannot index into type '{}'", obj_ty.to_string()),
                             span: span.clone(),
@@ -1499,7 +1556,11 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expr::StructLiteral { name, fields: field_inits, span } => {
+            Expr::StructLiteral {
+                name,
+                fields: field_inits,
+                span,
+            } => {
                 // Look up struct definition
                 if let Some(sym) = self.context.symbols.lookup(&name.node) {
                     if let SymbolKind::Struct { fields } = &sym.kind {
@@ -1509,7 +1570,9 @@ impl SemanticAnalyzer {
                         for init in field_inits {
                             if let Some(expected_ty) = field_map.get(&init.name.node) {
                                 let actual_ty = self.infer_expr_type(&init.value, local_types);
-                                if !actual_ty.is_compatible_with(expected_ty) && actual_ty != TypeInfo::Unknown {
+                                if !actual_ty.is_compatible_with(expected_ty)
+                                    && actual_ty != TypeInfo::Unknown
+                                {
                                     let (line, col) = self.line_col(&init.span);
                                     self.add_error(SemanticError::TypeMismatch {
                                         expected: expected_ty.to_string(),
@@ -1564,7 +1627,11 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expr::EnumVariant { enum_name, variant, span } => {
+            Expr::EnumVariant {
+                enum_name,
+                variant,
+                span,
+            } => {
                 // Validate enum and variant exist
                 if let Some(sym) = self.context.symbols.lookup(enum_name) {
                     if let SymbolKind::Enum { variants } = &sym.kind {
@@ -1657,7 +1724,9 @@ impl SemanticAnalyzer {
                     span: span.clone(),
                 })
             }
-            Expr::Await { expr, .. } => self.extract_call(flow_name, expr, binding, span, local_types),
+            Expr::Await { expr, .. } => {
+                self.extract_call(flow_name, expr, binding, span, local_types)
+            }
             _ => None,
         }
     }
@@ -1946,7 +2015,14 @@ mod tests {
 
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| {
-            matches!(e, SemanticError::ArgumentCountMismatch { expected: 1, found: 2, .. })
+            matches!(
+                e,
+                SemanticError::ArgumentCountMismatch {
+                    expected: 1,
+                    found: 2,
+                    ..
+                }
+            )
         }));
     }
 
@@ -2126,7 +2202,7 @@ mod tests {
     #[test]
     fn test_suggest_similar() {
         let candidates = vec!["classify_sentiment", "extract_entities", "summarize"];
-        
+
         let suggestion = suggest_similar("clasify_sentiment", &candidates, 3);
         assert!(suggestion.is_some());
         assert!(suggestion.unwrap().contains("classify_sentiment"));

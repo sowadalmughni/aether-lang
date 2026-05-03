@@ -11,6 +11,9 @@ default = []
 # Enable real LLM API calls (OpenAI, Anthropic)
 llm-api = ["reqwest"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Internal crates
 aether-core = { workspace = true }

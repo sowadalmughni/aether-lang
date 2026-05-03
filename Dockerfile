@@ -1,75 +1,84 @@
 # Aether Programming Language - Reproducible Build Environment
-# This Dockerfile creates a reproducible environment for building and testing
-# the Aether programming language implementation.
+#
+# Base: rust:latest (debian-based, ships rustc/cargo/rustup/clippy/rustfmt).
+# As of writing, rust:latest tracks debian trixie (Python 3.13). The task spec
+# requires "Python 3.11+", which trixie's python3 satisfies. rust:latest floats;
+# for strict reproducibility, pin to rust:<MAJOR>-<distro> in a follow-up.
+#
+# Builds the full Cargo workspace in release, runs `cargo test --workspace`
+# (a non-zero exit aborts the build), installs Python benchmark deps into a
+# venv, and builds the visualizer's static assets.
 
-FROM ubuntu:22.04
+FROM rust:latest
 
-# Set environment variables for reproducible builds
-ENV DEBIAN_FRONTEND=noninteractive
-ENV RUST_VERSION=1.82.0
-ENV NODE_VERSION=20.18.0
-ENV CARGO_HOME=/usr/local/cargo
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV PATH=/usr/local/cargo/bin:$PATH
+ENV DEBIAN_FRONTEND=noninteractive \
+    PNPM_VERSION=10.4.1 \
+    NODE_MAJOR=20 \
+    PATH=/opt/venv/bin:/usr/local/cargo/bin:$PATH
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
-    pkg-config \
-    libssl-dev \
-    python3 \
-    python3-pip \
+# 1. System dependencies. Use generic python3 / python3-venv packages so this
+#    works across debian releases (bookworm = 3.11, trixie = 3.13). Both
+#    satisfy the "Python 3.11+" requirement.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        python3-pip \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        curl \
+        ca-certificates \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
-    --default-toolchain $RUST_VERSION \
-    --profile minimal \
-    --no-modify-path \
-    -y
+# 2. Node.js 20 via NodeSource.
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js
-RUN curl -fsSL https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz \
-    | tar -xJ -C /usr/local --strip-components=1
+# 3. pnpm pinned to the version recorded in aether-dag-visualizer/package.json.
+RUN npm install -g pnpm@${PNPM_VERSION}
 
-# Install pnpm
-RUN npm install -g pnpm@latest
+# 4. Defensive: ensure clippy/rustfmt are present even if upstream image strips them.
+RUN rustup component add clippy rustfmt
 
-# Create working directory
+# 5. Python virtualenv at /opt/venv. Debian marks system Python externally
+#    managed (PEP 668); a venv is the cleanest escape, vs --break-system-packages.
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --upgrade pip
+
 WORKDIR /aether
 
-# Copy source code
+# 6. Copy source. (A cargo-chef multi-stage build for incremental dep caching is
+#    a future optimization; the current single-stage layout is simple and
+#    correct, and Docker's BuildKit cache mounts can speed repeat builds.)
 COPY . .
 
-# Build the Aether workspace (compiler + runtime)
-RUN cargo build --workspace --release && \
-    cargo test --workspace && \
-    cargo doc --workspace --no-deps
+# 7. Build the workspace in release mode. Non-zero exit aborts the image build.
+#    Note: --locked is intentionally NOT used. Cargo.lock on main has drifted
+#    from member Cargo.toml files; --locked would block any source-code-touching
+#    build until that drift is resolved. We let cargo regenerate the lock here.
+RUN cargo build --workspace --release
 
-# Run compiler-specific tests with verbose output
-RUN cargo test -p aether-compiler --release -- --nocapture
+# 8. Run the full test suite. Non-zero exit aborts the image build (acceptance).
+RUN cargo test --workspace --release
 
-# Build the DAG visualizer
-RUN cd aether-dag-visualizer && \
-    pnpm install && \
-    pnpm run build
+# 9. Install Python benchmark dependencies into the venv.
+RUN pip install --no-cache-dir -r bench/requirements.txt
 
-# Install Python dependencies for benchmarking
-RUN cd bench/lm-evaluation-harness && \
-    pip3 install -e . && \
-    pip3 install evaluate datasets
+# 10. Build the DAG visualizer's static assets so they ship in the image.
+RUN cd aether-dag-visualizer \
+    && pnpm install --frozen-lockfile \
+    && pnpm run build
 
-# Set up runtime environment
 EXPOSE 3000 5173
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -fsS http://localhost:3000/health || exit 1
 
-# Default command runs the Aether runtime
-CMD ["./aether-runtime/target/release/aether-runtime"]
+# Default command runs the Aether runtime. The previous Dockerfile pointed at
+# ./aether-runtime/target/release/... which does not exist; the workspace
+# target dir is /aether/target/release/.
+CMD ["/aether/target/release/aether-runtime"]
 
 # Build metadata
 LABEL maintainer="Aether Development Team"
@@ -84,4 +93,3 @@ LABEL artifact.evaluation.reproducible="true"
 LABEL artifact.evaluation.available="true"
 LABEL artifact.evaluation.functional="true"
 LABEL artifact.evaluation.reusable="true"
-

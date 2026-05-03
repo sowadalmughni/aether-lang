@@ -212,10 +212,7 @@ impl<'src> Parser<'src> {
                     self.advance();
                     self.expect(TokenKind::Colon)?;
                     let val = self.parse_number_as_int()?;
-                    max_tokens = Some(Spanned::new(
-                        val.node as u32,
-                        val.span,
-                    ));
+                    max_tokens = Some(Spanned::new(val.node as u32, val.span));
                 }
                 Some(TokenKind::System) => {
                     self.advance();
@@ -592,10 +589,7 @@ impl<'src> Parser<'src> {
         } else {
             let name_tok = self.expect(TokenKind::Ident)?;
             vec![ImportName {
-                name: Spanned::new(
-                    name_tok.text.to_string(),
-                    Span::from_range(name_tok.span),
-                ),
+                name: Spanned::new(name_tok.text.to_string(), Span::from_range(name_tok.span)),
                 alias: None,
             }]
         };
@@ -622,10 +616,7 @@ impl<'src> Parser<'src> {
 
         while !self.check(TokenKind::RBrace) && !self.is_at_end() {
             let name_tok = self.expect(TokenKind::Ident)?;
-            let name = Spanned::new(
-                name_tok.text.to_string(),
-                Span::from_range(name_tok.span),
-            );
+            let name = Spanned::new(name_tok.text.to_string(), Span::from_range(name_tok.span));
 
             let alias = if self.check(TokenKind::As) {
                 self.advance();
@@ -808,10 +799,7 @@ impl<'src> Parser<'src> {
         let start = self.expect(TokenKind::Let)?.span.start;
 
         let name_tok = self.expect(TokenKind::Ident)?;
-        let name = Spanned::new(
-            name_tok.text.to_string(),
-            Span::from_range(name_tok.span),
-        );
+        let name = Spanned::new(name_tok.text.to_string(), Span::from_range(name_tok.span));
 
         let ty = if self.check(TokenKind::Colon) {
             self.advance();
@@ -879,10 +867,7 @@ impl<'src> Parser<'src> {
         let start = self.expect(TokenKind::For)?.span.start;
 
         let var_tok = self.expect(TokenKind::Ident)?;
-        let var = Spanned::new(
-            var_tok.text.to_string(),
-            Span::from_range(var_tok.span),
-        );
+        let var = Spanned::new(var_tok.text.to_string(), Span::from_range(var_tok.span));
 
         self.expect(TokenKind::In)?;
         let iter = self.parse_expr()?;
@@ -1222,10 +1207,9 @@ impl<'src> Parser<'src> {
                 self.advance();
                 let args = self.parse_comma_separated(|p| p.parse_expr())?;
                 self.expect(TokenKind::RParen)?;
-                let span = expr.span().merge(&Span::new(
-                    self.prev_span_end() - 1,
-                    self.prev_span_end(),
-                ));
+                let span = expr
+                    .span()
+                    .merge(&Span::new(self.prev_span_end() - 1, self.prev_span_end()));
                 expr = Expr::Call {
                     func: Box::new(expr),
                     args,
@@ -1244,10 +1228,9 @@ impl<'src> Parser<'src> {
                     self.advance();
                     let args = self.parse_comma_separated(|p| p.parse_expr())?;
                     self.expect(TokenKind::RParen)?;
-                    let span = expr.span().merge(&Span::new(
-                        self.prev_span_end() - 1,
-                        self.prev_span_end(),
-                    ));
+                    let span = expr
+                        .span()
+                        .merge(&Span::new(self.prev_span_end() - 1, self.prev_span_end()));
                     expr = Expr::MethodCall {
                         receiver: Box::new(expr),
                         method: field,
@@ -1267,10 +1250,9 @@ impl<'src> Parser<'src> {
                 self.advance();
                 let index = self.parse_expr()?;
                 self.expect(TokenKind::RBracket)?;
-                let span = expr.span().merge(&Span::new(
-                    self.prev_span_end() - 1,
-                    self.prev_span_end(),
-                ));
+                let span = expr
+                    .span()
+                    .merge(&Span::new(self.prev_span_end() - 1, self.prev_span_end()));
                 expr = Expr::Index {
                     object: Box::new(expr),
                     index: Box::new(index),
@@ -1282,7 +1264,11 @@ impl<'src> Parser<'src> {
                 let variant_tok = self.expect(TokenKind::Ident)?;
 
                 // Get the enum name from the previous expression
-                if let Expr::Ident { name: enum_name, span: start_span } = &expr {
+                if let Expr::Ident {
+                    name: enum_name,
+                    span: start_span,
+                } = &expr
+                {
                     let span = start_span.merge(&Span::from_range(variant_tok.span.clone()));
                     expr = Expr::EnumVariant {
                         enum_name: enum_name.clone(),
@@ -1505,7 +1491,12 @@ impl<'src> Parser<'src> {
                 }
 
                 // Check if it looks like a variant (starts with uppercase)
-                if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                if name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
                     Ok(Pattern::EnumVariant {
                         enum_name: None,
                         variant: name,
@@ -1642,7 +1633,10 @@ impl<'src> Parser<'src> {
         let mut items = Vec::new();
 
         // Check for empty list (next token closes the list)
-        if self.check(TokenKind::RParen) || self.check(TokenKind::RBracket) || self.check(TokenKind::RBrace) {
+        if self.check(TokenKind::RParen)
+            || self.check(TokenKind::RBracket)
+            || self.check(TokenKind::RBrace)
+        {
             return Ok(items);
         }
 
@@ -1651,7 +1645,10 @@ impl<'src> Parser<'src> {
         while self.check(TokenKind::Comma) {
             self.advance();
             // Allow trailing comma
-            if self.check(TokenKind::RParen) || self.check(TokenKind::RBracket) || self.check(TokenKind::RBrace) {
+            if self.check(TokenKind::RParen)
+                || self.check(TokenKind::RBracket)
+                || self.check(TokenKind::RBrace)
+            {
                 break;
             }
             items.push(parse_fn(self)?);
@@ -1787,7 +1784,10 @@ mod tests {
             assert_eq!(error_data.len(), 1);
             assert!(matches!(
                 &error_data[0],
-                Type::Primitive { kind: PrimitiveType::String, .. }
+                Type::Primitive {
+                    kind: PrimitiveType::String,
+                    ..
+                }
             ));
 
             // Data(int, string) - tuple types
@@ -1796,11 +1796,17 @@ mod tests {
             assert_eq!(data_types.len(), 2);
             assert!(matches!(
                 &data_types[0],
-                Type::Primitive { kind: PrimitiveType::Int, .. }
+                Type::Primitive {
+                    kind: PrimitiveType::Int,
+                    ..
+                }
             ));
             assert!(matches!(
                 &data_types[1],
-                Type::Primitive { kind: PrimitiveType::String, .. }
+                Type::Primitive {
+                    kind: PrimitiveType::String,
+                    ..
+                }
             ));
         } else {
             panic!("Expected enum");

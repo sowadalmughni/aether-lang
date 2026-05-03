@@ -1,15 +1,15 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use aether_core::{Dag, DagNode, DagNodeType};
+use aether_core::{Dag, DagNode};
 use aether_runtime::{
-    AppState, Metrics, execute_flow,
+    cache::{CacheConfig, LlmCache},
     context::ExecutionContext,
+    execute_flow,
     llm::LlmConfig,
-    security::{SecurityMiddleware, SecurityConfig, DefaultInputSanitizer},
-    cache::{LlmCache, CacheConfig},
+    security::{DefaultInputSanitizer, SecurityConfig, SecurityMiddleware},
+    AppState, Metrics,
 };
+use criterion::{criterion_group, criterion_main, Criterion};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use std::collections::HashMap;
 
 fn create_bench_state() -> AppState {
     let metrics = Arc::new(Metrics::new());
@@ -31,15 +31,13 @@ fn create_bench_state() -> AppState {
 
 fn create_simple_dag() -> Dag {
     // A -> B -> C
-    let node_a = DagNode::llm_fn("a")
-        .prompt("Node A prompt")
-        .build();
-    
+    let node_a = DagNode::llm_fn("a").prompt("Node A prompt").build();
+
     let node_b = DagNode::llm_fn("b")
         .prompt("Node B prompt")
         .dependency("a")
         .build();
-    
+
     let node_c = DagNode::llm_fn("c")
         .prompt("Node C prompt")
         .dependency("b")
@@ -52,7 +50,7 @@ fn benchmark_dag_execution(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let state = create_bench_state();
     let dag = create_simple_dag();
-    
+
     // We use a clean context for each run, or reuse?
     // ExecutionContext::new() is cheap.
 
@@ -65,8 +63,9 @@ fn benchmark_dag_execution(c: &mut Criterion) {
                 &context,
                 true, // sequential
                 &state,
-                execution_id
-            ).await
+                execution_id,
+            )
+            .await
         })
     });
 
@@ -79,8 +78,9 @@ fn benchmark_dag_execution(c: &mut Criterion) {
                 &context,
                 false, // parallel (though structure is sequential A->B->C)
                 &state,
-                execution_id
-            ).await
+                execution_id,
+            )
+            .await
         })
     });
 }
@@ -89,7 +89,7 @@ fn create_parallel_dag() -> Dag {
     // 10 independent nodes
     let mut nodes = Vec::new();
     for i in 0..10 {
-        nodes.push(DagNode::compute(format!("node_{}", i)).build()); 
+        nodes.push(DagNode::compute(format!("node_{}", i)).build());
     }
     Dag::with_nodes(nodes)
 }
@@ -101,15 +101,9 @@ fn benchmark_parallel_dag(c: &mut Criterion) {
 
     c.bench_function("execute_parallel_dag_10_nodes", |b| {
         b.to_async(&rt).iter(|| async {
-             let execution_id = "bench-id-par-10";
+            let execution_id = "bench-id-par-10";
             let context = ExecutionContext::new(execution_id);
-            execute_flow(
-                &dag,
-                &context,
-                false, 
-                &state,
-                execution_id
-            ).await
+            execute_flow(&dag, &context, false, &state, execution_id).await
         })
     });
 }

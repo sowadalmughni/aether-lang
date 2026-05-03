@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint-and-test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+  bench-mock:
+    name: Benchmark (mock provider)
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    env:
+      AETHER_PROVIDER: mock
+      AETHER_RUNTIME_URL: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python benchmark deps
+        run: pip install -r bench/requirements.txt
+
+      - name: Build runtime (release)
+        run: cargo build --workspace --release
+
+      - name: Start runtime
+        run: |
+          ./target/release/aether-runtime &
+          echo "RUNTIME_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/health; then
+              echo "runtime healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "runtime failed to become healthy" >&2
+          exit 1
+
+      - name: Run benchmark (mock provider)
+        run: |
+          mkdir -p bench/results
+          # Provider is selected via AETHER_PROVIDER env var; run_benchmark.py
+          # has no --mode flag.
+          python scripts/run_benchmark.py \
+            --all \
+            --requests 100 \
+            --output bench/results/
+
+      - name: Stop runtime
+        if: always()
+        run: |
+          if [ -n "${RUNTIME_PID:-}" ]; then
+            kill "$RUNTIME_PID" 2>/dev/null || true
+          fi
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-benchmark-results-${{ github.sha }}
+          path: bench/results/
+          retention-days: 30

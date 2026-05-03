@@ -143,12 +143,10 @@ fn cmd_compile(
         .map_err(|e| miette!("Parse error: {:?}", e))?;
 
     // Semantic analysis
-    let ctx = SemanticAnalyzer::new()
-        .analyze(&program)
-        .map_err(|errs| {
-            let msgs: Vec<_> = errs.iter().map(|e| format!("  - {}", e)).collect();
-            miette!("Semantic errors:\n{}", msgs.join("\n"))
-        })?;
+    let ctx = SemanticAnalyzer::new().analyze(&program).map_err(|errs| {
+        let msgs: Vec<_> = errs.iter().map(|e| format!("  - {}", e)).collect();
+        miette!("Semantic errors:\n{}", msgs.join("\n"))
+    })?;
 
     // Configure codegen
     let config = CodegenConfig {
@@ -310,7 +308,8 @@ fn resolve_runtime_url(flag_url: Option<String>) -> Result<Url> {
 
 /// Validate that a URL is a valid http or https URL
 fn validate_runtime_url(url_str: &str) -> Result<Url> {
-    let url = Url::parse(url_str).map_err(|e| miette!("Invalid runtime URL '{}': {}", url_str, e))?;
+    let url =
+        Url::parse(url_str).map_err(|e| miette!("Invalid runtime URL '{}': {}", url_str, e))?;
 
     match url.scheme() {
         "http" | "https" => Ok(url),

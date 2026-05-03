@@ -8,11 +8,11 @@
 //! Designed for deterministic rendering to support reproducibility and caching.
 
 use crate::context::ExecutionContext;
-use aether_core::{DagNode, TemplateRef, TemplateRefKind, RenderPolicy, Sensitivity};
+use aether_core::{DagNode, RenderPolicy, Sensitivity, TemplateRef, TemplateRefKind};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{info, warn, instrument};
+use tracing::{info, instrument, warn};
 
 // =============================================================================
 // Template Error Types
@@ -33,10 +33,7 @@ pub enum TemplateError {
         node_id: String,
     },
     /// A context key is not in the allowed list
-    ContextKeyNotAllowed {
-        key: String,
-        allowed: Vec<String>,
-    },
+    ContextKeyNotAllowed { key: String, allowed: Vec<String> },
     /// Value exceeded maximum length
     ValueTooLong {
         key: String,
@@ -44,29 +41,60 @@ pub enum TemplateError {
         max_length: usize,
     },
     /// Invalid template syntax
-    InvalidSyntax {
-        placeholder: String,
-        reason: String,
-    },
+    InvalidSyntax { placeholder: String, reason: String },
 }
 
 impl std::fmt::Display for TemplateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TemplateError::MissingRequired { placeholder, kind, path } => {
-                write!(f, "Missing required {} reference '{}' (path: {:?})", kind, placeholder, path)
+            TemplateError::MissingRequired {
+                placeholder,
+                kind,
+                path,
+            } => {
+                write!(
+                    f,
+                    "Missing required {} reference '{}' (path: {:?})",
+                    kind, placeholder, path
+                )
             }
-            TemplateError::MissingNodeOutput { placeholder, node_id } => {
-                write!(f, "Missing output from node '{}' for placeholder '{}'", node_id, placeholder)
+            TemplateError::MissingNodeOutput {
+                placeholder,
+                node_id,
+            } => {
+                write!(
+                    f,
+                    "Missing output from node '{}' for placeholder '{}'",
+                    node_id, placeholder
+                )
             }
             TemplateError::ContextKeyNotAllowed { key, allowed } => {
-                write!(f, "Context key '{}' not in allowed list: {:?}", key, allowed)
+                write!(
+                    f,
+                    "Context key '{}' not in allowed list: {:?}",
+                    key, allowed
+                )
             }
-            TemplateError::ValueTooLong { key, length, max_length } => {
-                write!(f, "Value for '{}' exceeds max length ({} > {})", key, length, max_length)
+            TemplateError::ValueTooLong {
+                key,
+                length,
+                max_length,
+            } => {
+                write!(
+                    f,
+                    "Value for '{}' exceeds max length ({} > {})",
+                    key, length, max_length
+                )
             }
-            TemplateError::InvalidSyntax { placeholder, reason } => {
-                write!(f, "Invalid template syntax in '{}': {}", placeholder, reason)
+            TemplateError::InvalidSyntax {
+                placeholder,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid template syntax in '{}': {}",
+                    placeholder, reason
+                )
             }
         }
     }
@@ -194,7 +222,9 @@ pub fn render_prompt(
             rendered = rendered.replace(&tref.raw, &val);
 
             // Record substitution
-            let value_preview = if options.redact_sensitive && matches!(tref.sensitivity, Sensitivity::High | Sensitivity::Medium) {
+            let value_preview = if options.redact_sensitive
+                && matches!(tref.sensitivity, Sensitivity::High | Sensitivity::Medium)
+            {
                 "[REDACTED]".to_string()
             } else {
                 truncate_preview(&val, 50)
@@ -220,7 +250,8 @@ pub fn render_prompt(
 
     // Second pass: handle any remaining {{...}} placeholders not in template_refs
     // This supports legacy prompts and simple parameter references
-    rendered = render_legacy_placeholders(&rendered, node_outputs, &mut substitutions, &mut warnings);
+    rendered =
+        render_legacy_placeholders(&rendered, node_outputs, &mut substitutions, &mut warnings);
 
     info!(
         substitution_count = substitutions.len(),
@@ -290,7 +321,11 @@ fn resolve_template_ref(
 
         TemplateRefKind::Parameter => {
             // Parameters are typically passed as node_outputs with the parameter name
-            let param_name = tref.path.first().cloned().unwrap_or_else(|| tref.raw.trim_matches(|c| c == '{' || c == '}').to_string());
+            let param_name = tref
+                .path
+                .first()
+                .cloned()
+                .unwrap_or_else(|| tref.raw.trim_matches(|c| c == '{' || c == '}').to_string());
             Ok(node_outputs.get(&param_name).cloned())
         }
 
@@ -303,7 +338,11 @@ fn resolve_template_ref(
 
         TemplateRefKind::Variable => {
             // Variables are local to execution
-            let var_name = tref.path.first().cloned().unwrap_or_else(|| tref.raw.trim_matches(|c| c == '{' || c == '}').to_string());
+            let var_name = tref
+                .path
+                .first()
+                .cloned()
+                .unwrap_or_else(|| tref.raw.trim_matches(|c| c == '{' || c == '}').to_string());
             Ok(node_outputs.get(&var_name).cloned())
         }
     }
@@ -318,18 +357,18 @@ fn render_legacy_placeholders(
 ) -> String {
     // Regex to match {{...}} placeholders
     let re = Regex::new(r"\{\{([^}]+)\}\}").unwrap();
-    
+
     let mut result = template.to_string();
-    
+
     for cap in re.captures_iter(template) {
         let full_match = cap.get(0).unwrap().as_str();
         let inner = cap.get(1).unwrap().as_str().trim();
-        
+
         // Skip if already substituted (placeholder no longer exists)
         if !result.contains(full_match) {
             continue;
         }
-        
+
         // Try to resolve from node_outputs using the inner content
         if let Some(value) = node_outputs.get(inner) {
             result = result.replace(full_match, value);
@@ -337,13 +376,15 @@ fn render_legacy_placeholders(
                 placeholder: full_match.to_string(),
                 value_preview: truncate_preview(value, 50),
                 sensitivity: Sensitivity::Low,
-                source: SubstitutionSource::Parameter { name: inner.to_string() },
+                source: SubstitutionSource::Parameter {
+                    name: inner.to_string(),
+                },
             });
         } else {
             warnings.push(format!("Unresolved placeholder: {}", full_match));
         }
     }
-    
+
     result
 }
 
@@ -422,7 +463,9 @@ pub fn render_node_prompt(
     context: &ExecutionContext,
     node_outputs: &HashMap<String, String>,
 ) -> Result<RenderResult, TemplateError> {
-    let template = node.prompt_template.as_ref()
+    let template = node
+        .prompt_template
+        .as_ref()
         .or(node.prompt.as_ref())
         .map(|s| s.as_str())
         .unwrap_or("");
@@ -470,7 +513,8 @@ mod tests {
             &HashMap::new(),
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.rendered, "Hello, Alice! How are you?");
         assert_eq!(result.substitutions.len(), 1);
@@ -482,7 +526,10 @@ mod tests {
         let ctx = ExecutionContext::new("test");
 
         let mut outputs = HashMap::new();
-        outputs.insert("summarize".to_string(), "This is a summary of the document.".to_string());
+        outputs.insert(
+            "summarize".to_string(),
+            "This is a summary of the document.".to_string(),
+        );
 
         let template_refs = vec![TemplateRef {
             raw: "{{node.summarize.output}}".to_string(),
@@ -503,7 +550,8 @@ mod tests {
             &outputs,
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(
             result.rendered,
@@ -564,26 +612,34 @@ mod tests {
             &HashMap::new(),
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Placeholder stays if optional and missing
-        assert!(result.warnings.len() > 0);
+        assert!(!result.warnings.is_empty());
     }
 
     #[test]
     fn test_render_nested_context() {
         let template = "City: {{context.user.profile.city}}";
         let mut ctx = ExecutionContext::new("test");
-        ctx.set("user", serde_json::json!({
-            "profile": {
-                "city": "Seattle"
-            }
-        }));
+        ctx.set(
+            "user",
+            serde_json::json!({
+                "profile": {
+                    "city": "Seattle"
+                }
+            }),
+        );
 
         let template_refs = vec![TemplateRef {
             raw: "{{context.user.profile.city}}".to_string(),
             kind: TemplateRefKind::Context,
-            path: vec!["user".to_string(), "profile".to_string(), "city".to_string()],
+            path: vec![
+                "user".to_string(),
+                "profile".to_string(),
+                "city".to_string(),
+            ],
             node_id: None,
             field: None,
             required: true,
@@ -599,7 +655,8 @@ mod tests {
             &HashMap::new(),
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.rendered, "City: Seattle");
     }
@@ -636,7 +693,10 @@ mod tests {
             &RenderOptions::default(),
         );
 
-        assert!(matches!(result, Err(TemplateError::ContextKeyNotAllowed { .. })));
+        assert!(matches!(
+            result,
+            Err(TemplateError::ContextKeyNotAllowed { .. })
+        ));
     }
 
     #[test]
@@ -669,7 +729,8 @@ mod tests {
             &HashMap::new(),
             &RenderPolicy::default(),
             &options,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(
             result.rendered,
@@ -693,7 +754,8 @@ mod tests {
             &outputs,
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.rendered, "Analyze: The document content");
     }
@@ -722,14 +784,16 @@ mod tests {
             &HashMap::new(),
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.rendered, "Version: 2.0.0");
     }
 
     #[test]
     fn test_render_multiple_placeholders() {
-        let template = "Dear {{context.recipient}}, regarding {{node.topic.output}}: {{context.message}}";
+        let template =
+            "Dear {{context.recipient}}, regarding {{node.topic.output}}: {{context.message}}";
         let mut ctx = ExecutionContext::new("test");
         ctx.set_string("recipient", "Bob");
         ctx.set_string("message", "Please review.");
@@ -780,9 +844,13 @@ mod tests {
             &outputs,
             &RenderPolicy::default(),
             &RenderOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
-        assert_eq!(result.rendered, "Dear Bob, regarding Q3 Report: Please review.");
+        assert_eq!(
+            result.rendered,
+            "Dear Bob, regarding Q3 Report: Please review."
+        );
         assert_eq!(result.substitutions.len(), 3);
     }
 
@@ -821,8 +889,12 @@ mod tests {
             &ctx,
             &HashMap::new(),
             &RenderPolicy::default(),
-            &RenderOptions { redact_sensitive: true, ..Default::default() },
-        ).unwrap();
+            &RenderOptions {
+                redact_sensitive: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
 
         assert!(result.contains_sensitive);
         assert_eq!(result.substitutions[0].value_preview, "[REDACTED]");

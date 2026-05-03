@@ -49,4 +49,3 @@ pub use semantic::{SemanticAnalyzer, SemanticContext, SemanticError};
 
 // Re-export core types
 pub use aether_core::{Dag, DagNode, DagNodeType, TemplateRef, TemplateRefKind};
-

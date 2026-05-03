@@ -30,19 +30,15 @@ pub enum TemplateRefKind {
 /// Sensitivity level for template references (for security policies).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum Sensitivity {
     /// Low sensitivity - safe to log and cache
+    #[default]
     Low,
     /// Medium sensitivity - cache but redact in logs
     Medium,
     /// High sensitivity - do not cache, redact in logs
     High,
-}
-
-impl Default for Sensitivity {
-    fn default() -> Self {
-        Sensitivity::Low
-    }
 }
 
 /// A structured reference to a template placeholder.
@@ -419,8 +415,10 @@ impl Default for Dag {
 /// State of a node during/after execution
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum NodeState {
     /// Node has not started execution
+    #[default]
     Pending,
     /// Node is currently executing
     Running,
@@ -430,12 +428,6 @@ pub enum NodeState {
     Failed,
     /// Node was skipped (due to dependency failure or abort)
     Skipped,
-}
-
-impl Default for NodeState {
-    fn default() -> Self {
-        NodeState::Pending
-    }
 }
 
 /// Status information for a single node
@@ -523,8 +515,10 @@ pub struct NodeExecutionResult {
 /// Error policy for handling failures during parallel execution
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ErrorPolicy {
     /// Stop scheduling new nodes immediately on failure
+    #[default]
     Fail,
     /// Continue executing independent nodes, skip dependents
     Skip,
@@ -532,14 +526,11 @@ pub enum ErrorPolicy {
     Retry,
 }
 
-impl Default for ErrorPolicy {
-    fn default() -> Self {
-        ErrorPolicy::Fail
-    }
-}
-
 impl ErrorPolicy {
-    /// Parse from string (for DAG execution hints)
+    /// Parse from string (for DAG execution hints).
+    /// Inherent method, intentionally not std::str::FromStr (the trait
+    /// signature returns Result; this signature is infallible).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "skip" => ErrorPolicy::Skip,
@@ -562,7 +553,6 @@ pub struct DagExecutionResponse {
     pub errors: Vec<String>,
 
     // === New fields for observability ===
-
     /// Execution time for each level (to prove parallel speedup)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub level_execution_times_ms: Vec<u64>,
@@ -596,7 +586,6 @@ pub struct DagExecutionResponse {
     pub tokens_saved: u32,
 
     // === Latency percentiles (computed server-side for accuracy) ===
-
     /// Node latency p50 in milliseconds (across all executed nodes)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_latency_p50_ms: Option<u64>,
@@ -766,26 +755,24 @@ mod tests {
 
     #[test]
     fn test_dag_serialization() {
-        let dag = Dag::with_nodes(vec![
-            DagNode::llm_fn("classify")
-                .name("classify_sentiment")
-                .model("gpt-4o")
-                .temperature(0.1)
-                .prompt_template("Classify the sentiment of: {{text}}")
-                .template_ref(TemplateRef {
-                    raw: "{{text}}".to_string(),
-                    kind: TemplateRefKind::Parameter,
-                    path: vec!["text".to_string()],
-                    node_id: None,
-                    field: None,
-                    required: true,
-                    sensitivity: Sensitivity::Low,
-                    folded_value: None,
-                    provenance: None,
-                })
-                .return_type("Sentiment")
-                .build(),
-        ]);
+        let dag = Dag::with_nodes(vec![DagNode::llm_fn("classify")
+            .name("classify_sentiment")
+            .model("gpt-4o")
+            .temperature(0.1)
+            .prompt_template("Classify the sentiment of: {{text}}")
+            .template_ref(TemplateRef {
+                raw: "{{text}}".to_string(),
+                kind: TemplateRefKind::Parameter,
+                path: vec!["text".to_string()],
+                node_id: None,
+                field: None,
+                required: true,
+                sensitivity: Sensitivity::Low,
+                folded_value: None,
+                provenance: None,
+            })
+            .return_type("Sentiment")
+            .build()]);
 
         let json = dag.to_json().unwrap();
         let parsed: Dag = Dag::from_json(&json).unwrap();

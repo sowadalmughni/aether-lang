@@ -173,7 +173,10 @@ impl ExecutionContext {
     }
 
     /// Create a context with pre-populated variables
-    pub fn with_variables(execution_id: impl Into<String>, variables: HashMap<String, Value>) -> Self {
+    pub fn with_variables(
+        execution_id: impl Into<String>,
+        variables: HashMap<String, Value>,
+    ) -> Self {
         Self {
             execution_id: execution_id.into(),
             variables,
@@ -223,7 +226,8 @@ impl ExecutionContext {
 
     /// Set a string variable
     pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.variables.insert(key.into(), Value::String(value.into()));
+        self.variables
+            .insert(key.into(), Value::String(value.into()));
     }
 
     /// Remove a variable
@@ -387,7 +391,11 @@ mod tests {
             Some(&Value::String("Alice".to_string()))
         );
 
-        let path_city = vec!["user".to_string(), "profile".to_string(), "city".to_string()];
+        let path_city = vec![
+            "user".to_string(),
+            "profile".to_string(),
+            "city".to_string(),
+        ];
         assert_eq!(
             ctx.get_path(&path_city),
             Some(&Value::String("Seattle".to_string()))

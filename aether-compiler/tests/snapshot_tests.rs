@@ -63,13 +63,16 @@ fn test_parallel_flow_dag() {
     "#;
 
     let dag = compile_flow(source, "analyze");
-    
+
     // Verify parallel structure: both nodes have no dependencies
     assert_eq!(dag.nodes.len(), 2);
     for node in &dag.nodes {
-        assert!(node.dependencies.is_empty(), "Parallel nodes should have no dependencies");
+        assert!(
+            node.dependencies.is_empty(),
+            "Parallel nodes should have no dependencies"
+        );
     }
-    
+
     assert_json_snapshot!("parallel_flow_dag", dag, {
         ".metadata.compiled_at" => "[redacted]"
     });
@@ -102,18 +105,18 @@ fn test_chained_flow_dag() {
     "#;
 
     let dag = compile_flow(source, "pipeline");
-    
+
     // Verify chain structure
     assert_eq!(dag.nodes.len(), 3);
-    
+
     let summary_node = dag.nodes.iter().find(|n| n.id == "summary").unwrap();
     let analysis_node = dag.nodes.iter().find(|n| n.id == "analysis").unwrap();
     let actions_node = dag.nodes.iter().find(|n| n.id == "actions").unwrap();
-    
+
     assert!(summary_node.dependencies.is_empty());
     assert_eq!(analysis_node.dependencies, vec!["summary"]);
     assert_eq!(actions_node.dependencies, vec!["analysis"]);
-    
+
     assert_json_snapshot!("chained_flow_dag", dag, {
         ".metadata.compiled_at" => "[redacted]"
     });
@@ -134,13 +137,13 @@ fn test_template_refs_metadata() {
     "#;
 
     let dag = compile_flow(source, "hello");
-    
+
     assert_eq!(dag.nodes.len(), 1);
     let node = &dag.nodes[0];
-    
+
     // Should have template refs for both parameters
     assert!(!node.template_refs.is_empty());
-    
+
     assert_json_snapshot!("template_refs_metadata", dag, {
         ".metadata.compiled_at" => "[redacted]"
     });
@@ -161,13 +164,13 @@ fn test_dag_metadata() {
     "#;
 
     let dag = compile_flow(source, "test_flow");
-    
+
     // Verify metadata
     assert_eq!(dag.metadata.flow_name, Some("test_flow".to_string()));
     assert_eq!(dag.metadata.inputs.len(), 2);
     assert_eq!(dag.metadata.inputs[0].name, "input");
     assert_eq!(dag.metadata.inputs[1].name, "count");
-    
+
     assert_json_snapshot!("dag_metadata", dag, {
         ".metadata.compiled_at" => "[redacted]"
     });

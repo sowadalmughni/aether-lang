@@ -176,7 +176,10 @@ pub fn llm_call_attributes(
         KeyValue::new("aether.llm.provider", provider.to_string()),
         KeyValue::new("aether.llm.input_tokens", input_tokens as i64),
         KeyValue::new("aether.llm.output_tokens", output_tokens as i64),
-        KeyValue::new("aether.llm.total_tokens", (input_tokens + output_tokens) as i64),
+        KeyValue::new(
+            "aether.llm.total_tokens",
+            (input_tokens + output_tokens) as i64,
+        ),
         KeyValue::new("aether.llm.cache_hit", cache_hit),
     ]
 }

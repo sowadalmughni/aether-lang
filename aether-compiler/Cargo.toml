@@ -10,6 +10,9 @@ description = "Compiler for the Aether programming language - type-safe LLM orch
 name = "aetherc"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # Internal crates
 aether-core = { workspace = true }

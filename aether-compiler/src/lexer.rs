@@ -501,59 +501,124 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        assert_eq!(tokenize("llm fn flow"), vec![TokenKind::Llm, TokenKind::Fn, TokenKind::Flow]);
-        assert_eq!(tokenize("struct enum type"), vec![TokenKind::Struct, TokenKind::Enum, TokenKind::Type]);
-        assert_eq!(tokenize("context test"), vec![TokenKind::Context, TokenKind::Test]);
-        assert_eq!(tokenize("if else match"), vec![TokenKind::If, TokenKind::Else, TokenKind::Match]);
-        assert_eq!(tokenize("try catch retry fallback"), vec![
-            TokenKind::Try, TokenKind::Catch, TokenKind::Retry, TokenKind::Fallback
-        ]);
+        assert_eq!(
+            tokenize("llm fn flow"),
+            vec![TokenKind::Llm, TokenKind::Fn, TokenKind::Flow]
+        );
+        assert_eq!(
+            tokenize("struct enum type"),
+            vec![TokenKind::Struct, TokenKind::Enum, TokenKind::Type]
+        );
+        assert_eq!(
+            tokenize("context test"),
+            vec![TokenKind::Context, TokenKind::Test]
+        );
+        assert_eq!(
+            tokenize("if else match"),
+            vec![TokenKind::If, TokenKind::Else, TokenKind::Match]
+        );
+        assert_eq!(
+            tokenize("try catch retry fallback"),
+            vec![
+                TokenKind::Try,
+                TokenKind::Catch,
+                TokenKind::Retry,
+                TokenKind::Fallback
+            ]
+        );
     }
 
     #[test]
     fn test_type_keywords() {
-        assert_eq!(tokenize("string int float bool"), vec![
-            TokenKind::StringType, TokenKind::IntType, TokenKind::FloatType, TokenKind::BoolType
-        ]);
-        assert_eq!(tokenize("list map optional"), vec![
-            TokenKind::ListType, TokenKind::MapType, TokenKind::OptionalType
-        ]);
+        assert_eq!(
+            tokenize("string int float bool"),
+            vec![
+                TokenKind::StringType,
+                TokenKind::IntType,
+                TokenKind::FloatType,
+                TokenKind::BoolType
+            ]
+        );
+        assert_eq!(
+            tokenize("list map optional"),
+            vec![
+                TokenKind::ListType,
+                TokenKind::MapType,
+                TokenKind::OptionalType
+            ]
+        );
     }
 
     #[test]
     fn test_llm_keywords() {
-        assert_eq!(tokenize("model prompt system user"), vec![
-            TokenKind::Model, TokenKind::Prompt, TokenKind::System, TokenKind::User
-        ]);
-        assert_eq!(tokenize("temperature max_tokens"), vec![
-            TokenKind::Temperature, TokenKind::MaxTokens
-        ]);
+        assert_eq!(
+            tokenize("model prompt system user"),
+            vec![
+                TokenKind::Model,
+                TokenKind::Prompt,
+                TokenKind::System,
+                TokenKind::User
+            ]
+        );
+        assert_eq!(
+            tokenize("temperature max_tokens"),
+            vec![TokenKind::Temperature, TokenKind::MaxTokens]
+        );
     }
 
     #[test]
     fn test_operators() {
-        assert_eq!(tokenize("-> : :: , ."), vec![
-            TokenKind::Arrow, TokenKind::Colon, TokenKind::DoubleColon,
-            TokenKind::Comma, TokenKind::Dot
-        ]);
-        assert_eq!(tokenize("= == != < > <= >="), vec![
-            TokenKind::Eq, TokenKind::EqEq, TokenKind::NotEq,
-            TokenKind::Lt, TokenKind::Gt, TokenKind::LtEq, TokenKind::GtEq
-        ]);
-        assert_eq!(tokenize("+ - * / %"), vec![
-            TokenKind::Plus, TokenKind::Minus, TokenKind::Star,
-            TokenKind::Slash, TokenKind::Percent
-        ]);
-        assert_eq!(tokenize("&& || !"), vec![TokenKind::And, TokenKind::Or, TokenKind::Not]);
+        assert_eq!(
+            tokenize("-> : :: , ."),
+            vec![
+                TokenKind::Arrow,
+                TokenKind::Colon,
+                TokenKind::DoubleColon,
+                TokenKind::Comma,
+                TokenKind::Dot
+            ]
+        );
+        assert_eq!(
+            tokenize("= == != < > <= >="),
+            vec![
+                TokenKind::Eq,
+                TokenKind::EqEq,
+                TokenKind::NotEq,
+                TokenKind::Lt,
+                TokenKind::Gt,
+                TokenKind::LtEq,
+                TokenKind::GtEq
+            ]
+        );
+        assert_eq!(
+            tokenize("+ - * / %"),
+            vec![
+                TokenKind::Plus,
+                TokenKind::Minus,
+                TokenKind::Star,
+                TokenKind::Slash,
+                TokenKind::Percent
+            ]
+        );
+        assert_eq!(
+            tokenize("&& || !"),
+            vec![TokenKind::And, TokenKind::Or, TokenKind::Not]
+        );
     }
 
     #[test]
     fn test_delimiters() {
-        assert_eq!(tokenize("{ } ( ) [ ]"), vec![
-            TokenKind::LBrace, TokenKind::RBrace,
-            TokenKind::LParen, TokenKind::RParen,
-            TokenKind::LBracket, TokenKind::RBracket
-        ]);
+        assert_eq!(
+            tokenize("{ } ( ) [ ]"),
+            vec![
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::LBracket,
+                TokenKind::RBracket
+            ]
+        );
     }
 
     #[test]
@@ -562,24 +627,35 @@ mod tests {
         assert_eq!(tokenize("-123"), vec![TokenKind::IntLiteral]);
         assert_eq!(tokenize("3.14"), vec![TokenKind::FloatLiteral]);
         assert_eq!(tokenize("-0.5"), vec![TokenKind::FloatLiteral]);
-        assert_eq!(tokenize("true false"), vec![TokenKind::True, TokenKind::False]);
+        assert_eq!(
+            tokenize("true false"),
+            vec![TokenKind::True, TokenKind::False]
+        );
         assert_eq!(tokenize(r#""hello world""#), vec![TokenKind::StringLiteral]);
-        assert_eq!(tokenize(r#""escaped \"quote\"""#), vec![TokenKind::StringLiteral]);
+        assert_eq!(
+            tokenize(r#""escaped \"quote\"""#),
+            vec![TokenKind::StringLiteral]
+        );
     }
 
     #[test]
     fn test_identifiers() {
-        assert_eq!(tokenize("foo bar_baz _private"), vec![
-            TokenKind::Ident, TokenKind::Ident, TokenKind::Ident
-        ]);
-        assert_eq!(tokenize("camelCase PascalCase snake_case"), vec![
-            TokenKind::Ident, TokenKind::Ident, TokenKind::Ident
-        ]);
+        assert_eq!(
+            tokenize("foo bar_baz _private"),
+            vec![TokenKind::Ident, TokenKind::Ident, TokenKind::Ident]
+        );
+        assert_eq!(
+            tokenize("camelCase PascalCase snake_case"),
+            vec![TokenKind::Ident, TokenKind::Ident, TokenKind::Ident]
+        );
     }
 
     #[test]
     fn test_template_markers() {
-        assert_eq!(tokenize("{{ }}"), vec![TokenKind::TemplateOpen, TokenKind::TemplateClose]);
+        assert_eq!(
+            tokenize("{{ }}"),
+            vec![TokenKind::TemplateOpen, TokenKind::TemplateClose]
+        );
     }
 
     #[test]
@@ -600,115 +676,136 @@ mod tests {
     #[test]
     fn test_llm_fn_signature() {
         let source = r#"llm fn classify(text: string) -> Sentiment"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::Llm,
-            TokenKind::Fn,
-            TokenKind::Ident, // classify
-            TokenKind::LParen,
-            TokenKind::Ident, // text
-            TokenKind::Colon,
-            TokenKind::StringType,
-            TokenKind::RParen,
-            TokenKind::Arrow,
-            TokenKind::Ident, // Sentiment
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::Llm,
+                TokenKind::Fn,
+                TokenKind::Ident, // classify
+                TokenKind::LParen,
+                TokenKind::Ident, // text
+                TokenKind::Colon,
+                TokenKind::StringType,
+                TokenKind::RParen,
+                TokenKind::Arrow,
+                TokenKind::Ident, // Sentiment
+            ]
+        );
     }
 
     #[test]
     fn test_struct_definition() {
         let source = r#"struct Message { role: string, content: string }"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::Struct,
-            TokenKind::Ident, // Message
-            TokenKind::LBrace,
-            TokenKind::Ident, // role
-            TokenKind::Colon,
-            TokenKind::StringType,
-            TokenKind::Comma,
-            TokenKind::Ident, // content
-            TokenKind::Colon,
-            TokenKind::StringType,
-            TokenKind::RBrace,
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::Struct,
+                TokenKind::Ident, // Message
+                TokenKind::LBrace,
+                TokenKind::Ident, // role
+                TokenKind::Colon,
+                TokenKind::StringType,
+                TokenKind::Comma,
+                TokenKind::Ident, // content
+                TokenKind::Colon,
+                TokenKind::StringType,
+                TokenKind::RBrace,
+            ]
+        );
     }
 
     #[test]
     fn test_enum_definition() {
         let source = r#"enum Sentiment { Positive, Neutral, Negative }"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::Enum,
-            TokenKind::Ident, // Sentiment
-            TokenKind::LBrace,
-            TokenKind::Ident, // Positive
-            TokenKind::Comma,
-            TokenKind::Ident, // Neutral
-            TokenKind::Comma,
-            TokenKind::Ident, // Negative
-            TokenKind::RBrace,
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::Enum,
+                TokenKind::Ident, // Sentiment
+                TokenKind::LBrace,
+                TokenKind::Ident, // Positive
+                TokenKind::Comma,
+                TokenKind::Ident, // Neutral
+                TokenKind::Comma,
+                TokenKind::Ident, // Negative
+                TokenKind::RBrace,
+            ]
+        );
     }
 
     #[test]
     fn test_flow_signature() {
         let source = r#"flow analyze(doc: string) -> Result"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::Flow,
-            TokenKind::Ident, // analyze
-            TokenKind::LParen,
-            TokenKind::Ident, // doc
-            TokenKind::Colon,
-            TokenKind::StringType,
-            TokenKind::RParen,
-            TokenKind::Arrow,
-            TokenKind::Ident, // Result
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::Flow,
+                TokenKind::Ident, // analyze
+                TokenKind::LParen,
+                TokenKind::Ident, // doc
+                TokenKind::Colon,
+                TokenKind::StringType,
+                TokenKind::RParen,
+                TokenKind::Arrow,
+                TokenKind::Ident, // Result
+            ]
+        );
     }
 
     #[test]
     fn test_llm_fn_body() {
         let source = r#"model: "gpt-4o", temperature: 0.7"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::Model,
-            TokenKind::Colon,
-            TokenKind::StringLiteral, // "gpt-4o"
-            TokenKind::Comma,
-            TokenKind::Temperature,
-            TokenKind::Colon,
-            TokenKind::FloatLiteral, // 0.7
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::Model,
+                TokenKind::Colon,
+                TokenKind::StringLiteral, // "gpt-4o"
+                TokenKind::Comma,
+                TokenKind::Temperature,
+                TokenKind::Colon,
+                TokenKind::FloatLiteral, // 0.7
+            ]
+        );
     }
 
     #[test]
     fn test_decorator() {
         let source = r#"@input_guard(pii_detection)"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::At,
-            TokenKind::Ident, // input_guard
-            TokenKind::LParen,
-            TokenKind::Ident, // pii_detection
-            TokenKind::RParen,
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::At,
+                TokenKind::Ident, // input_guard
+                TokenKind::LParen,
+                TokenKind::Ident, // pii_detection
+                TokenKind::RParen,
+            ]
+        );
     }
 
     #[test]
     fn test_generic_types() {
         let source = r#"list<string> map<string, int> optional<Message>"#;
-        assert_eq!(tokenize(source), vec![
-            TokenKind::ListType,
-            TokenKind::Lt,
-            TokenKind::StringType,
-            TokenKind::Gt,
-            TokenKind::MapType,
-            TokenKind::Lt,
-            TokenKind::StringType,
-            TokenKind::Comma,
-            TokenKind::IntType,
-            TokenKind::Gt,
-            TokenKind::OptionalType,
-            TokenKind::Lt,
-            TokenKind::Ident, // Message
-            TokenKind::Gt,
-        ]);
+        assert_eq!(
+            tokenize(source),
+            vec![
+                TokenKind::ListType,
+                TokenKind::Lt,
+                TokenKind::StringType,
+                TokenKind::Gt,
+                TokenKind::MapType,
+                TokenKind::Lt,
+                TokenKind::StringType,
+                TokenKind::Comma,
+                TokenKind::IntType,
+                TokenKind::Gt,
+                TokenKind::OptionalType,
+                TokenKind::Lt,
+                TokenKind::Ident, // Message
+                TokenKind::Gt,
+            ]
+        );
     }
 
     #[test]
@@ -720,9 +817,7 @@ mod tests {
     #[test]
     fn test_token_spans() {
         let source = "fn test";
-        let tokens: Vec<_> = Lexer::new(source)
-            .filter_map(|r| r.ok())
-            .collect();
+        let tokens: Vec<_> = Lexer::new(source).filter_map(|r| r.ok()).collect();
 
         assert_eq!(tokens[0].span, 0..2);
         assert_eq!(tokens[0].text, "fn");

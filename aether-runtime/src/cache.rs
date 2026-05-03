@@ -219,7 +219,8 @@ impl LlmCache {
 
         if let Some(response) = cache.get(&hash) {
             stats.hits += 1;
-            stats.tokens_saved += (response.original_input_tokens + response.original_output_tokens) as u64;
+            stats.tokens_saved +=
+                (response.original_input_tokens + response.original_output_tokens) as u64;
             info!(
                 cache_key_hash = %hash,
                 hit_rate = %stats.hit_rate(),
@@ -306,12 +307,9 @@ mod tests {
 
     #[test]
     fn test_cache_key_hash_with_params() {
-        let key1 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string())
-            .with_temperature(0.7);
-        let key2 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string())
-            .with_temperature(0.7);
-        let key3 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string())
-            .with_temperature(0.5);
+        let key1 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string()).with_temperature(0.7);
+        let key2 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string()).with_temperature(0.7);
+        let key3 = CacheKey::new("Hello".to_string(), "gpt-4o".to_string()).with_temperature(0.5);
 
         assert_eq!(key1.hash(), key2.hash());
         assert_ne!(key1.hash(), key3.hash());
@@ -326,11 +324,7 @@ mod tests {
         assert!(cache.get(&key).is_none());
 
         // Store a response
-        let response = CachedResponse::new(
-            "Test output".to_string(),
-            10,
-            key.hash(),
-        );
+        let response = CachedResponse::new("Test output".to_string(), 10, key.hash());
         cache.put(&key, response.clone());
 
         // Hit on second lookup
@@ -356,11 +350,7 @@ mod tests {
         // Fill cache
         for i in 0..3 {
             let key = CacheKey::new(format!("Prompt {}", i), "gpt-4o".to_string());
-            let response = CachedResponse::new(
-                format!("Output {}", i),
-                10,
-                key.hash(),
-            );
+            let response = CachedResponse::new(format!("Output {}", i), 10, key.hash());
             cache.put(&key, response);
         }
 
@@ -379,11 +369,7 @@ mod tests {
         let cache = LlmCache::new(config);
         let key = CacheKey::new("Test".to_string(), "gpt-4o".to_string());
 
-        let response = CachedResponse::new(
-            "Output".to_string(),
-            10,
-            key.hash(),
-        );
+        let response = CachedResponse::new("Output".to_string(), 10, key.hash());
 
         cache.put(&key, response);
         assert!(cache.get(&key).is_none());
@@ -395,11 +381,7 @@ mod tests {
         let cache = LlmCache::with_defaults();
         let key = CacheKey::new("Test".to_string(), "gpt-4o".to_string());
 
-        let response = CachedResponse::new(
-            "Output".to_string(),
-            10,
-            key.hash(),
-        );
+        let response = CachedResponse::new("Output".to_string(), 10, key.hash());
 
         cache.put(&key, response);
         assert_eq!(cache.len(), 1);

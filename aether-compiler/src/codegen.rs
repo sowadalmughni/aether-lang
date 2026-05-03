@@ -10,10 +10,10 @@
 //! - Preserve type information for runtime validation
 
 use crate::ast::{StringTemplate, TemplatePart};
-use crate::semantic::{CallArg, FlowCall, LlmFnInfo, SemanticContext, SymbolKind};
+use crate::semantic::{CallArg, LlmFnInfo, SemanticContext, SymbolKind};
 use aether_core::{
-    Dag, DagInput, DagMetadata, DagNode, DagNodeType, Provenance, Sensitivity, SourceLocation,
-    TemplateRef, TemplateRefKind,
+    Dag, DagInput, DagMetadata, DagNode, Provenance, Sensitivity, SourceLocation, TemplateRef,
+    TemplateRefKind,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -245,7 +245,7 @@ impl Codegen {
         // Initialize all nodes
         for node in nodes {
             in_degree.entry(node.id.as_str()).or_insert(0);
-            adjacency.entry(node.id.as_str()).or_insert_with(Vec::new);
+            adjacency.entry(node.id.as_str()).or_default();
         }
 
         // Build the graph from dependencies
@@ -253,7 +253,10 @@ impl Codegen {
             for dep in &node.dependencies {
                 // Only consider dependencies that are actual nodes in this flow
                 if node_ids.contains(dep.as_str()) {
-                    adjacency.entry(dep.as_str()).or_default().push(node.id.as_str());
+                    adjacency
+                        .entry(dep.as_str())
+                        .or_default()
+                        .push(node.id.as_str());
                     *in_degree.entry(node.id.as_str()).or_insert(0) += 1;
                 }
             }
@@ -335,7 +338,7 @@ impl Codegen {
                 TemplatePart::Variable(var_name) => {
                     // Parse the variable reference
                     let template_ref = self.parse_template_var(var_name, &arg_map, var_to_node)?;
-                    
+
                     // Check for compile-time folding
                     if self.config.fold_constants {
                         if let Some(value) = self.try_fold_constant(&template_ref) {
@@ -413,7 +416,11 @@ impl Codegen {
                 field: None,
                 required: true,
                 sensitivity: Sensitivity::Low,
-                folded_value: self.config.constants.get(&var_name["const.".len()..]).cloned(),
+                folded_value: self
+                    .config
+                    .constants
+                    .get(&var_name["const.".len()..])
+                    .cloned(),
                 provenance: None,
             });
         }
@@ -657,7 +664,10 @@ mod tests {
         assert_eq!(dag.nodes[0].model, Some("gpt-4o".to_string()));
         assert!(dag.nodes[0].dependencies.is_empty());
         assert_eq!(dag.nodes[0].template_refs.len(), 1);
-        assert_eq!(dag.nodes[0].template_refs[0].kind, TemplateRefKind::Parameter);
+        assert_eq!(
+            dag.nodes[0].template_refs[0].kind,
+            TemplateRefKind::Parameter
+        );
     }
 
     #[test]
@@ -782,9 +792,7 @@ mod tests {
     fn test_cycle_detection_no_cycle() {
         // Valid linear flow: A -> B -> C
         let nodes = vec![
-            DagNode::llm_fn("a")
-                .dependencies(vec![])
-                .build(),
+            DagNode::llm_fn("a").dependencies(vec![]).build(),
             DagNode::llm_fn("b")
                 .dependencies(vec!["a".to_string()])
                 .build(),
@@ -800,11 +808,9 @@ mod tests {
     #[test]
     fn test_cycle_detection_self_reference() {
         // Node references itself: A -> A
-        let nodes = vec![
-            DagNode::llm_fn("a")
-                .dependencies(vec!["a".to_string()])
-                .build(),
-        ];
+        let nodes = vec![DagNode::llm_fn("a")
+            .dependencies(vec!["a".to_string()])
+            .build()];
 
         let codegen = Codegen::default();
         let result = codegen.detect_cycles(&nodes);
@@ -836,9 +842,7 @@ mod tests {
     fn test_cycle_detection_complex() {
         // Complex cycle: A -> B -> C -> A
         let nodes = vec![
-            DagNode::llm_fn("a")
-                .dependencies(vec![])
-                .build(),
+            DagNode::llm_fn("a").dependencies(vec![]).build(),
             DagNode::llm_fn("b")
                 .dependencies(vec!["a".to_string()])
                 .build(),
@@ -859,9 +863,7 @@ mod tests {
     fn test_cycle_detection_parallel_no_cycle() {
         // Parallel nodes with common dependency
         let nodes = vec![
-            DagNode::llm_fn("input")
-                .dependencies(vec![])
-                .build(),
+            DagNode::llm_fn("input").dependencies(vec![]).build(),
             DagNode::llm_fn("branch_a")
                 .dependencies(vec!["input".to_string()])
                 .build(),

@@ -1,16 +1,18 @@
 //! Aether Runtime Library
-use aether_core::{Dag, DagNode, DagNodeType, NodeState, NodeStatus, ErrorPolicy, NodeExecutionResult as ExecutionResult};
 pub use aether_core::DagExecutionResponse;
+use aether_core::{
+    Dag, DagNode, DagNodeType, ErrorPolicy, NodeExecutionResult as ExecutionResult, NodeState,
+    NodeStatus,
+};
 
-use prometheus::{Counter, Gauge, Histogram, Registry};
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
+use petgraph::graph::{DiGraph, NodeIndex};
+use prometheus::{Counter, Gauge, Histogram, Registry};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::task::JoinSet;
 use tracing::{info, instrument, span, warn, Level};
-use uuid::Uuid;
 
 pub mod cache;
 pub mod context;
@@ -19,10 +21,10 @@ pub mod security;
 pub mod telemetry;
 pub mod template;
 
-use cache::{LlmCache, CacheKey, CachedResponse};
+use cache::{CacheKey, CachedResponse, LlmCache};
 use context::ExecutionContext;
-use llm::{LlmConfig, LlmRequest, create_client};
-use security::{SecurityMiddleware, SecurityError};
+use llm::{create_client, LlmConfig, LlmRequest};
+use security::{SecurityError, SecurityMiddleware};
 use template::render_node_prompt;
 
 // =============================================================================
@@ -87,9 +89,11 @@ impl Metrics {
     pub fn new() -> Self {
         let registry = Registry::new();
 
-        let executed_nodes =
-            Counter::new("aether_executed_nodes_total", "Total number of executed nodes")
-                .expect("Failed to create executed_nodes counter");
+        let executed_nodes = Counter::new(
+            "aether_executed_nodes_total",
+            "Total number of executed nodes",
+        )
+        .expect("Failed to create executed_nodes counter");
 
         let token_cost = Counter::new("aether_token_cost_total", "Total simulated token cost")
             .expect("Failed to create token_cost counter");
@@ -182,8 +186,9 @@ pub fn get_execution_levels(dag: &Dag) -> Result<DagLevelInfo, String> {
 
     // Topological sort to detect cycles
     let sorted = toposort(&graph, None).map_err(|cycle| {
-        let node_id = graph.node_weight(cycle.node_id())
-            .map(|s| s.clone())
+        let node_id = graph
+            .node_weight(cycle.node_id())
+            .cloned()
             .unwrap_or_else(|| "unknown".to_string());
         format!("Cycle detected in DAG involving node '{}'", node_id)
     })?;
@@ -256,7 +261,7 @@ pub async fn execute_node(
 ) -> Result<InternalNodeResult, String> {
     if node.node_type == DagNodeType::LlmFn {
         let template = node.prompt_template.as_ref().or(node.prompt.as_ref());
-        if let Some(template) = template {
+        if let Some(_template) = template {
             let render_result = render_node_prompt(node, context, outputs)
                 .map_err(|e| format!("Template rendering failed: {}", e))?;
 
@@ -294,7 +299,10 @@ pub async fn execute_node(
                 });
             }
 
-            let model = node.model.clone().unwrap_or_else(|| llm_config.default_model.clone());
+            let model = node
+                .model
+                .clone()
+                .unwrap_or_else(|| llm_config.default_model.clone());
             let client = create_client(llm_config, &model);
 
             let request = LlmRequest {
@@ -310,13 +318,9 @@ pub async fn execute_node(
             let output = llm_response.content.clone();
             let token_cost = llm_response.total_tokens;
 
-            let response = CachedResponse::new(
-                output.clone(),
-                token_cost,
-                cache_key.hash(),
-            )
-            .with_tokens(llm_response.input_tokens, llm_response.output_tokens)
-            .with_model(&model, &llm_response.provider);
+            let response = CachedResponse::new(output.clone(), token_cost, cache_key.hash())
+                .with_tokens(llm_response.input_tokens, llm_response.output_tokens)
+                .with_model(&model, &llm_response.provider);
 
             cache.put(&cache_key, response);
 
@@ -392,7 +396,9 @@ pub async fn execute_flow(
         }
     };
 
-    let error_policy = dag.nodes.first()
+    let error_policy = dag
+        .nodes
+        .first()
         .and_then(|n| n.execution_hints.error_policy.as_ref())
         .map(|s| ErrorPolicy::from_str(s))
         .unwrap_or(ErrorPolicy::Fail);
@@ -416,7 +422,10 @@ pub async fn execute_flow(
     for (level_idx, level_nodes) in level_info.levels.iter().enumerate() {
         if aborted && error_policy == ErrorPolicy::Fail {
             for node_id in level_nodes {
-                node_status_map.insert(node_id.clone(), NodeStatus::skipped("Aborted due to previous failure"));
+                node_status_map.insert(
+                    node_id.clone(),
+                    NodeStatus::skipped("Aborted due to previous failure"),
+                );
                 skipped_nodes.push(node_id.clone());
             }
             continue;
@@ -424,29 +433,51 @@ pub async fn execute_flow(
 
         let level_start = Instant::now();
         let parallel_count = level_nodes.len();
-        let effective_parallel = if sequential_mode { 1.min(parallel_count) } else { parallel_count };
+        let effective_parallel = if sequential_mode {
+            1.min(parallel_count)
+        } else {
+            parallel_count
+        };
         max_parallel = max_parallel.max(effective_parallel);
 
         state.metrics.parallel_nodes.set(effective_parallel as f64);
 
-        let span = span!(Level::INFO, "execute_level", level = level_idx, nodes = parallel_count, sequential = sequential_mode);
+        let span = span!(
+            Level::INFO,
+            "execute_level",
+            level = level_idx,
+            nodes = parallel_count,
+            sequential = sequential_mode
+        );
         let _enter = span.enter();
 
-        info!(level = level_idx, parallel_nodes = parallel_count, sequential_mode = sequential_mode, "Executing level");
+        info!(
+            level = level_idx,
+            parallel_nodes = parallel_count,
+            sequential_mode = sequential_mode,
+            "Executing level"
+        );
 
         if sequential_mode {
             for node_id in level_nodes {
-                 if error_policy == ErrorPolicy::Skip {
-                    let deps_failed = node_map.get(node_id.as_str())
-                        .map(|n| n.dependencies.iter().any(|dep| {
-                            node_status_map.get(dep)
-                                .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
-                                .unwrap_or(false)
-                        }))
+                if error_policy == ErrorPolicy::Skip {
+                    let deps_failed = node_map
+                        .get(node_id.as_str())
+                        .map(|n| {
+                            n.dependencies.iter().any(|dep| {
+                                node_status_map
+                                    .get(dep)
+                                    .map(|s| {
+                                        matches!(s.state, NodeState::Failed | NodeState::Skipped)
+                                    })
+                                    .unwrap_or(false)
+                            })
+                        })
                         .unwrap_or(false);
 
                     if deps_failed {
-                        node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
+                        node_status_map
+                            .insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
                         skipped_nodes.push(node_id.clone());
                         continue;
                     }
@@ -454,19 +485,34 @@ pub async fn execute_flow(
 
                 if let Some(node) = node_map.get(node_id.as_str()) {
                     let node_start = Instant::now();
-                    let result = execute_node(node, &state.security, &state.cache, &state.llm_config, context, &outputs).await;
+                    let result = execute_node(
+                        node,
+                        &state.security,
+                        &state.cache,
+                        &state.llm_config,
+                        context,
+                        &outputs,
+                    )
+                    .await;
                     let execution_time_ms = node_start.elapsed().as_millis() as u64;
 
                     match result {
                         Ok(node_result) => {
                             state.metrics.executed_nodes.inc();
-                            state.metrics.token_cost.inc_by(node_result.token_cost as f64);
-                            state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
+                            state
+                                .metrics
+                                .token_cost
+                                .inc_by(node_result.token_cost as f64);
+                            state
+                                .metrics
+                                .execution_time
+                                .observe(execution_time_ms as f64 / 1000.0);
 
                             if node_result.cache_hit {
                                 state.metrics.cache_hits.inc();
                                 total_cache_hits += 1;
-                                tokens_saved += node_result.input_tokens + node_result.output_tokens;
+                                tokens_saved +=
+                                    node_result.input_tokens + node_result.output_tokens;
                             } else {
                                 state.metrics.cache_misses.inc();
                                 total_cache_misses += 1;
@@ -507,17 +553,24 @@ pub async fn execute_flow(
             let mut join_set = JoinSet::new();
 
             for node_id in level_nodes {
-                 if error_policy == ErrorPolicy::Skip {
-                    let deps_failed = node_map.get(node_id.as_str())
-                        .map(|n| n.dependencies.iter().any(|dep| {
-                            node_status_map.get(dep)
-                                .map(|s| matches!(s.state, NodeState::Failed | NodeState::Skipped))
-                                .unwrap_or(false)
-                        }))
+                if error_policy == ErrorPolicy::Skip {
+                    let deps_failed = node_map
+                        .get(node_id.as_str())
+                        .map(|n| {
+                            n.dependencies.iter().any(|dep| {
+                                node_status_map
+                                    .get(dep)
+                                    .map(|s| {
+                                        matches!(s.state, NodeState::Failed | NodeState::Skipped)
+                                    })
+                                    .unwrap_or(false)
+                            })
+                        })
                         .unwrap_or(false);
 
                     if deps_failed {
-                        node_status_map.insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
+                        node_status_map
+                            .insert(node_id.clone(), NodeStatus::skipped("Dependency failed"));
                         skipped_nodes.push(node_id.clone());
                         continue;
                     }
@@ -529,11 +582,19 @@ pub async fn execute_flow(
                     let llm_config = state.llm_config.clone();
                     let context = (*context).clone();
                     let outputs = outputs.clone();
-                    let node_cloned = (*node).clone(); 
-                    
+                    let node_cloned = (*node).clone();
+
                     join_set.spawn(async move {
                         let node_start = Instant::now();
-                        let result = execute_node(&node_cloned, &security, &cache, &llm_config, &context, &outputs).await;
+                        let result = execute_node(
+                            &node_cloned,
+                            &security,
+                            &cache,
+                            &llm_config,
+                            &context,
+                            &outputs,
+                        )
+                        .await;
                         let execution_time_ms = node_start.elapsed().as_millis() as u64;
                         (node_cloned.id, result, execution_time_ms)
                     });
@@ -542,51 +603,56 @@ pub async fn execute_flow(
 
             while let Some(res) = join_set.join_next().await {
                 match res {
-                    Ok((node_id, result, execution_time_ms)) => {
-                        match result {
-                            Ok(node_result) => {
-                                state.metrics.executed_nodes.inc();
-                                state.metrics.token_cost.inc_by(node_result.token_cost as f64);
-                                state.metrics.execution_time.observe(execution_time_ms as f64 / 1000.0);
+                    Ok((node_id, result, execution_time_ms)) => match result {
+                        Ok(node_result) => {
+                            state.metrics.executed_nodes.inc();
+                            state
+                                .metrics
+                                .token_cost
+                                .inc_by(node_result.token_cost as f64);
+                            state
+                                .metrics
+                                .execution_time
+                                .observe(execution_time_ms as f64 / 1000.0);
 
-                                if node_result.cache_hit {
-                                    state.metrics.cache_hits.inc();
-                                    total_cache_hits += 1;
-                                    tokens_saved += node_result.input_tokens + node_result.output_tokens;
-                                } else {
-                                    state.metrics.cache_misses.inc();
-                                    total_cache_misses += 1;
-                                }
-
-                                total_token_cost += node_result.token_cost;
-                                outputs.insert(node_id.clone(), node_result.output.clone());
-                                node_execution_times.insert(node_id.clone(), execution_time_ms);
-                                node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
-
-                                results.push(ExecutionResult {
-                                    node_id: node_id.clone(),
-                                    output: node_result.output,
-                                    execution_time_ms,
-                                    token_cost: node_result.token_cost,
-                                    cache_hit: node_result.cache_hit,
-                                    rendered_prompt: node_result.rendered_prompt,
-                                    input_tokens: node_result.input_tokens,
-                                    output_tokens: node_result.output_tokens,
-                                    level: level_idx,
-                                });
+                            if node_result.cache_hit {
+                                state.metrics.cache_hits.inc();
+                                total_cache_hits += 1;
+                                tokens_saved +=
+                                    node_result.input_tokens + node_result.output_tokens;
+                            } else {
+                                state.metrics.cache_misses.inc();
+                                total_cache_misses += 1;
                             }
-                            Err(e) => {
-                                state.metrics.errors.inc();
-                                errors.push(format!("Node {}: {}", node_id, e));
-                                node_status_map.insert(node_id.clone(), NodeStatus::failed(&e));
-                                node_execution_times.insert(node_id.clone(), 0);
 
-                                if error_policy == ErrorPolicy::Fail {
-                                    aborted = true;
-                                }
+                            total_token_cost += node_result.token_cost;
+                            outputs.insert(node_id.clone(), node_result.output.clone());
+                            node_execution_times.insert(node_id.clone(), execution_time_ms);
+                            node_status_map.insert(node_id.clone(), NodeStatus::succeeded());
+
+                            results.push(ExecutionResult {
+                                node_id: node_id.clone(),
+                                output: node_result.output,
+                                execution_time_ms,
+                                token_cost: node_result.token_cost,
+                                cache_hit: node_result.cache_hit,
+                                rendered_prompt: node_result.rendered_prompt,
+                                input_tokens: node_result.input_tokens,
+                                output_tokens: node_result.output_tokens,
+                                level: level_idx,
+                            });
+                        }
+                        Err(e) => {
+                            state.metrics.errors.inc();
+                            errors.push(format!("Node {}: {}", node_id, e));
+                            node_status_map.insert(node_id.clone(), NodeStatus::failed(&e));
+                            node_execution_times.insert(node_id.clone(), 0);
+
+                            if error_policy == ErrorPolicy::Fail {
+                                aborted = true;
                             }
                         }
-                    }
+                    },
                     Err(e) => {
                         errors.push(format!("Task execution panicked: {}", e));
                         if error_policy == ErrorPolicy::Fail {
@@ -660,7 +726,7 @@ mod tests {
     fn make_test_node(id: &str, deps: Vec<&str>) -> DagNode {
         DagNode {
             id: id.to_string(),
-            node_type: DagNodeType::Compute, 
+            node_type: DagNodeType::Compute,
             name: Some(id.to_string()),
             prompt_template: None,
             prompt: None,
@@ -749,7 +815,7 @@ mod tests {
             make_test_node("b", vec!["a"]),
             make_test_node("c", vec!["a"]),
             make_test_node("d", vec!["b", "c"]),
-            make_test_node("e", vec![]),  
+            make_test_node("e", vec![]),
         ]);
 
         let level_info = get_execution_levels(&dag).unwrap();
@@ -838,4 +904,3 @@ mod tests {
         assert_eq!(percentiles.p99, Some(200));
     }
 }
-

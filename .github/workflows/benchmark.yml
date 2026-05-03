@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Set up Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           
@@ -76,27 +76,27 @@ jobs:
           
       - name: Run benchmark scenarios
         run: |
-          mkdir -p results
+          mkdir -p bench/results
           python scripts/run_benchmark.py \
             --all \
             --requests ${{ github.event.inputs.requests || '100' }} \
             --baselines \
-            --output results/
+            --output bench/results/
         env:
           AETHER_PROVIDER: ${{ github.event.inputs.provider || 'mock' }}
           AETHER_RUNTIME_URL: http://localhost:3000
-          
+
       - name: Extract performance metrics from Prometheus
         run: |
-          curl http://localhost:3000/metrics > results/prometheus_metrics.txt
-          
+          curl http://localhost:3000/metrics > bench/results/prometheus_metrics.txt
+
           # Parse and format metrics
           python3 -c "
           import json
           import re
           from datetime import datetime
-          
-          with open('results/prometheus_metrics.txt', 'r') as f:
+
+          with open('bench/results/prometheus_metrics.txt', 'r') as f:
               metrics = f.read()
           
           # Extract execution time histogram
@@ -118,7 +118,7 @@ jobs:
               {'name': 'Cache Hit Rate', 'unit': '%', 'value': round(cache_hit_rate * 100, 2)}
           ]
           
-          with open('results/benchmark_data.json', 'w') as f:
+          with open('bench/results/benchmark_data.json', 'w') as f:
               json.dump(benchmark_data, f)
           
           print(f'Average latency: {avg_latency_ms:.2f}ms')
@@ -133,7 +133,7 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             
-            const resultsDir = 'results';
+            const resultsDir = 'bench/results';
             const files = fs.readdirSync(resultsDir).filter(f => f.startsWith('benchmark_') && f.endsWith('.json'));
             if (files.length === 0) return;
             
@@ -166,7 +166,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'customSmallerIsBetter'
-          output-file-path: results/benchmark_data.json
+          output-file-path: bench/results/benchmark_data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: true
@@ -177,6 +177,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ github.sha }}
-          path: results/
+          path: bench/results/
           retention-days: 90
 

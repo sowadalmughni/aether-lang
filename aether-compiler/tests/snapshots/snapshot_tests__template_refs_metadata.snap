@@ -8,7 +8,7 @@ expression: dag
     "flow_name": "hello",
     "source_file": "test.aether",
     "compiler_version": "0.1.0",
-    "compiled_at": "2026-02-05T07:30:02.546124+00:00",
+    "compiled_at": "[redacted]",
     "inputs": [
       {
         "name": "username",

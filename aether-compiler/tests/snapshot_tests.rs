@@ -36,7 +36,10 @@ fn test_simple_sentiment_dag() {
     "#;
 
     let dag = compile_flow(source, "analyze");
-    assert_json_snapshot!("simple_sentiment_dag", dag);
+    // Redact non-deterministic timestamp so snapshots are stable across runs.
+    assert_json_snapshot!("simple_sentiment_dag", dag, {
+        ".metadata.compiled_at" => "[redacted]"
+    });
 }
 
 #[test]
@@ -67,7 +70,9 @@ fn test_parallel_flow_dag() {
         assert!(node.dependencies.is_empty(), "Parallel nodes should have no dependencies");
     }
     
-    assert_json_snapshot!("parallel_flow_dag", dag);
+    assert_json_snapshot!("parallel_flow_dag", dag, {
+        ".metadata.compiled_at" => "[redacted]"
+    });
 }
 
 #[test]
@@ -109,7 +114,9 @@ fn test_chained_flow_dag() {
     assert_eq!(analysis_node.dependencies, vec!["summary"]);
     assert_eq!(actions_node.dependencies, vec!["analysis"]);
     
-    assert_json_snapshot!("chained_flow_dag", dag);
+    assert_json_snapshot!("chained_flow_dag", dag, {
+        ".metadata.compiled_at" => "[redacted]"
+    });
 }
 
 #[test]
@@ -134,7 +141,9 @@ fn test_template_refs_metadata() {
     // Should have template refs for both parameters
     assert!(!node.template_refs.is_empty());
     
-    assert_json_snapshot!("template_refs_metadata", dag);
+    assert_json_snapshot!("template_refs_metadata", dag, {
+        ".metadata.compiled_at" => "[redacted]"
+    });
 }
 
 #[test]
@@ -159,5 +168,7 @@ fn test_dag_metadata() {
     assert_eq!(dag.metadata.inputs[0].name, "input");
     assert_eq!(dag.metadata.inputs[1].name, "count");
     
-    assert_json_snapshot!("dag_metadata", dag);
+    assert_json_snapshot!("dag_metadata", dag, {
+        ".metadata.compiled_at" => "[redacted]"
+    });
 }

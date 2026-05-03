@@ -428,16 +428,22 @@ def _shutdown_runtime(proc: Optional[subprocess.Popen]) -> None:
 def launch_runtime(repo_root: Path, url: str, timeout_s: float = 180.0) -> subprocess.Popen:
     """Spawn cargo run --release -p aether-runtime with mock provider, wait
     for /health, register cleanup. Caller owns the returned Popen handle but
-    atexit will also try to shut it down."""
+    atexit will also try to shut it down.
+
+    stdout/stderr go to a log file rather than a pipe — the runtime emits
+    a tracing line per request, and a PIPE that nothing drains will fill
+    its 64K kernel buffer and deadlock the runtime mid-execution."""
     env = {**os.environ, "AETHER_PROVIDER": "mock"}
-    print(f"Spawning runtime via cargo (cwd={repo_root})...", flush=True)
+    log_path = repo_root / "bench" / "results" / "runtime.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh = open(log_path, "w", buffering=1)
+    print(f"Spawning runtime via cargo (cwd={repo_root}, log={log_path})...", flush=True)
     proc = subprocess.Popen(
         ["cargo", "run", "--release", "-p", "aether-runtime"],
         cwd=str(repo_root),
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=log_fh,
         stderr=subprocess.STDOUT,
-        text=True,
     )
     atexit.register(_shutdown_runtime, proc)
     for sig_name in ("SIGINT", "SIGTERM"):
@@ -450,13 +456,13 @@ def launch_runtime(repo_root: Path, url: str, timeout_s: float = 180.0) -> subpr
 
     if not _wait_for_runtime(url, timeout_s=timeout_s):
         _shutdown_runtime(proc)
-        # Drain any captured output so the operator sees why it failed.
         try:
-            tail = proc.stdout.read() if proc.stdout else ""
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
         except Exception:
             tail = ""
         raise RuntimeError(
-            f"runtime did not become healthy at {url} within {timeout_s}s\n--- runtime output (tail) ---\n{tail[-4000:]}"
+            f"runtime did not become healthy at {url} within {timeout_s}s\n"
+            f"--- runtime log tail ({log_path}) ---\n{tail}"
         )
     print(f"Runtime is healthy at {url}", flush=True)
     return proc

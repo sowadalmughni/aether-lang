@@ -1,8 +1,9 @@
 # Aether Programming Language - Reproducible Build Environment
 #
-# Base: rust:latest (debian-bookworm-slim, ships rustc/cargo/rustup/clippy/rustfmt).
-# rust:latest floats; for strict reproducibility, pin to rust:1.82-bookworm in a
-# follow-up. Per task spec we use :latest here.
+# Base: rust:latest (debian-based, ships rustc/cargo/rustup/clippy/rustfmt).
+# As of writing, rust:latest tracks debian trixie (Python 3.13). The task spec
+# requires "Python 3.11+", which trixie's python3 satisfies. rust:latest floats;
+# for strict reproducibility, pin to rust:<MAJOR>-<distro> in a follow-up.
 #
 # Builds the full Cargo workspace in release, runs `cargo test --workspace`
 # (a non-zero exit aborts the build), installs Python benchmark deps into a
@@ -15,10 +16,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NODE_MAJOR=20 \
     PATH=/opt/venv/bin:/usr/local/cargo/bin:$PATH
 
-# 1. System dependencies. Bookworm ships Python 3.11 in main.
+# 1. System dependencies. Use generic python3 / python3-venv packages so this
+#    works across debian releases (bookworm = 3.11, trixie = 3.13). Both
+#    satisfy the "Python 3.11+" requirement.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 \
-        python3.11-venv \
+        python3 \
+        python3-venv \
         python3-pip \
         build-essential \
         pkg-config \
@@ -39,9 +42,9 @@ RUN npm install -g pnpm@${PNPM_VERSION}
 # 4. Defensive: ensure clippy/rustfmt are present even if upstream image strips them.
 RUN rustup component add clippy rustfmt
 
-# 5. Python virtualenv at /opt/venv. Bookworm marks system Python externally
+# 5. Python virtualenv at /opt/venv. Debian marks system Python externally
 #    managed (PEP 668); a venv is the cleanest escape, vs --break-system-packages.
-RUN python3.11 -m venv /opt/venv && /opt/venv/bin/pip install --upgrade pip
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --upgrade pip
 
 WORKDIR /aether
 

@@ -1,18 +1,25 @@
 # Aether benchmark Python dependencies.
 #
-# langchain stack: exact pins. bench/baselines/langchain_baseline.py imports
-# real langchain symbols (LCEL chains, RunnableParallel, InMemoryCache); the
-# numbers in bench/results/langchain_v1.json are tied to these exact versions,
-# so loosening the pins would break artifact-evaluation reproducibility.
+# langchain and dspy stacks: exact pins. bench/baselines/langchain_baseline.py
+# imports real langchain symbols (LCEL chains, RunnableParallel, InMemoryCache);
+# bench/baselines/dspy_baseline.py imports real DSPy symbols (BaseLM, Signature,
+# Module, Predict, ChainOfThought, ChatAdapter). The numbers in
+# bench/results/langchain_v1.json and bench/results/dspy_v1.json are tied to
+# these exact versions, so loosening the pins would break artifact-evaluation
+# reproducibility.
 #
-# dspy_baseline.py is still a stdlib-only behavioral stub. dspy-ai stays on
-# a range pin until that baseline is rewritten.
+# NOTE on DSPy: `dspy-ai` is now a metadata-only alias for the `dspy`
+# package (https://pypi.org/project/dspy-ai/), so pinning `dspy-ai==2.6.27`
+# alone would let the underlying `dspy` package float (it currently resolves
+# to dspy 3.2.1, released 2026-05-05). We pin BOTH `dspy-ai==2.6.27` and
+# `dspy==2.6.27` to keep `import dspy` -> 2.6.27 deterministic.
 
 langchain==0.3.28
 langchain-core==0.3.84
 langchain-openai==0.2.14
 langchain-anthropic==0.2.4
-dspy-ai>=2.5,<3.0
+dspy-ai==2.6.27
+dspy==2.6.27
 datasets>=2.20,<4.0
 numpy>=1.26,<3.0
 scipy>=1.13,<2.0

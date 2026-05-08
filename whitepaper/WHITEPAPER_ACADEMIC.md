@@ -920,9 +920,23 @@ Source: `aether_real_api_v1.json` `results[0]` (sequential), `results[1]` (paral
 
 **Discussion.** Real-API parallel-cached is two orders of magnitude faster than sequential on this workflow (p50 6821 ms → 37.3 ms, ratio ≈ 183×) because the cached path skips both the OpenAI round-trip and the inter-stage scheduling overhead; the only remaining cost is one HTTP loopback per item from the bench client to the runtime. Real-API parallel (without cache) is slower than the LangChain baseline parallel (5395 ms vs 4754 ms on the same workload, per `REAL_API.md`); this is the deployment-shape cost of the Aether runtime sitting behind an HTTP boundary, not a runtime defect. We document it explicitly in 9.6.5 rather than hiding it.
 
-### 9.7 Threats to Validity
+### 9.7 HotpotQA Latency (mock-mode)
 
-#### 9.7.1 Internal Validity
+A 500-question slice of the HotpotQA dev set was run against all three systems with a mock LLM, 3 trials per system. Source: `bench/results/hotpotqa_aether_v1.json`, `bench/results/hotpotqa_langchain_v1.json`, `bench/results/hotpotqa_dspy_v1.json`. Cells are `mean ± std [95% CI]` across 3 trials.
+
+| System | EM | F1 | p50 (ms) | p95 (ms) |
+|---|---|---|---|---|
+| Aether | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 143.83333333333334 ± 0.2886751345948129 [143.5, 144.0] | 146.33333333333334 ± 0.5773502691896258 [146.0, 147.0] |
+| LangChain | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 108.49894999895089 ± 0.8508429744625017 [107.51680000248598, 108.99724999641573] | 110.34190166719782 ± 0.033401565456278384 [110.32218999971519, 110.38043999978981] |
+| DSPy | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 103.75349999958416 ± 0.1824530546193411 [103.54295000070124, 103.86089999883552] | 104.75013499950971 ± 0.10656340077598293 [104.68012499756394, 104.86560000317695] |
+
+**EM and F1 are 0 across all three systems because this benchmark was executed with a mock LLM provider; the JSON exists to validate the dataset loader and per-question latency measurement, not answer accuracy.** We did not run HotpotQA against a real LLM in this paper revision; doing so is straightforward (`AETHER_PROVIDER=openai` plus the `aether_hotpot.py` driver under `bench/baselines/`) but was deferred for cost reasons. Treat the latency numbers as runtime/orchestration overhead per question, not as a claim about retrieval-augmented generation quality.
+
+The latency ordering — DSPy fastest, then LangChain, then Aether — reflects in-process Python (DSPy, LangChain) versus over-HTTP (Aether bench client to runtime), the same deployment-shape pattern documented in `bench/results/REAL_API.md`. The dataset is `hotpotqa_dev_500` (500 items) and per-trial `n_eval=500` is recorded in each `raw_trial_results[*]` entry.
+
+### 9.9 Threats to Validity
+
+#### 9.9.1 Internal Validity
 
 **Mock provider bias**: Most benchmarks use mock LLM providers with simulated latency. Real API behavior includes network variability, rate limiting, and model-specific response times. Mitigation: CI workflow supports real provider runs with API keys.
 
@@ -930,7 +944,7 @@ Source: `aether_real_api_v1.json` `results[0]` (sequential), `results[1]` (paral
 
 **Cache warm-up effects**: Benchmark runs include both cold and warm cache measurements to isolate caching benefits from baseline performance.
 
-#### 9.7.2 External Validity
+#### 9.9.2 External Validity
 
 **Language maturity**: Aether is a prototype. Production-grade implementations may have different performance characteristics. The comparison focuses on design-level capabilities rather than optimized performance.
 
@@ -938,7 +952,7 @@ Source: `aether_real_api_v1.json` `results[0]` (sequential), `results[1]` (paral
 
 **Provider variability**: Results with GPT-4o may not generalize to other models (Claude, Gemini, open-source models).
 
-#### 9.7.3 Construct Validity
+#### 9.9.3 Construct Validity
 
 **Lines of code metric**: LOC does not capture all aspects of developer productivity (debugging time, maintenance burden, correctness). We use it as a proxy for complexity.
 

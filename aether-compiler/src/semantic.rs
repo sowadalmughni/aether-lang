@@ -179,6 +179,82 @@ pub enum SemanticError {
         span: Span,
         line: usize,
     },
+
+    #[error(
+        "Taint violation: untrusted data from {origin} reaches LLM function '{llm_fn_name}' \
+        at line {line}, column {column} without passing through `sanitize(...)`. \
+        Wrap the value in `sanitize(...)` before it flows into the prompt."
+    )]
+    TaintViolation {
+        /// Name of the binding/parameter where the taint originated.
+        origin: String,
+        /// Name of the llm fn whose prompt the untrusted value reaches.
+        llm_fn_name: String,
+        span: Span,
+        line: usize,
+        column: usize,
+    },
+
+    #[error(
+        "Conflicting taint decorators on '{name}' at line {line}: \
+        cannot mark both `@trusted` and `@untrusted`."
+    )]
+    ConflictingTaintDecorators {
+        name: String,
+        span: Span,
+        line: usize,
+    },
+
+    #[error(
+        "Cannot shadow built-in `sanitize` at line {line}, column {column}. \
+        `sanitize` is reserved for the compile-time taint pass."
+    )]
+    SanitizeShadowed {
+        span: Span,
+        line: usize,
+        column: usize,
+    },
+}
+
+// =============================================================================
+// SECTION: Taint metadata
+// =============================================================================
+// Future extraction target: semantic/taint.rs
+//
+// The taint pass tracks each binding's `TaintLevel` independently of its
+// `TypeInfo`. Levels form a small lattice with `Untrusted` as the top
+// (most-restrictive) element: when joining two levels (e.g. across a let
+// binding's RHS or an if/else branch), the result is the more restrictive
+// of the two.
+
+/// Compile-time taint classification for a value or binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaintLevel {
+    /// Default classification when no `@trusted` / `@untrusted` decorator
+    /// applies and no upstream binding is known to be untrusted. The taint
+    /// pass treats `Unknown` as trusted for the purpose of allowing prompt
+    /// substitution (i.e. it only emits errors for definitely-untrusted
+    /// data); this avoids spurious violations on programs that do not opt
+    /// into the taint model at all.
+    Unknown,
+    /// Explicitly marked as safe via `@trusted`, or produced by `sanitize(...)`.
+    Trusted,
+    /// Explicitly marked as `@untrusted`, or transitively derived from an
+    /// untrusted source without passing through `sanitize(...)`.
+    Untrusted,
+}
+
+impl TaintLevel {
+    /// Lattice join: the more restrictive of `self` and `other`.
+    /// Untrusted dominates Trusted, which dominates Unknown.
+    pub fn join(self, other: TaintLevel) -> TaintLevel {
+        use TaintLevel::*;
+        match (self, other) {
+            (Untrusted, _) | (_, Untrusted) => Untrusted,
+            (Trusted, _) | (_, Trusted) => Trusted,
+            _ => Unknown,
+        }
+    }
 }
 
 pub type SemanticResult<T> = Result<T, Vec<SemanticError>>;

@@ -3127,4 +3127,415 @@ mod tests {
             result.err()
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Pass 6: Taint analysis — full matrix
+    // -------------------------------------------------------------------------
+    //
+    // Per the task plan: at least 7 positive (taint-clean), at least 8
+    // negative (must fire TaintViolation), and at least 5 tricky/edge
+    // cases. Combined with the smoke tests above, the taint suite should
+    // hit 20+.
+
+    fn count_taint_violations(errs: &[SemanticError]) -> usize {
+        errs.iter()
+            .filter(|e| matches!(e, SemanticError::TaintViolation { .. }))
+            .count()
+    }
+
+    fn assert_clean(source: &str) {
+        let result = analyze(source);
+        assert!(
+            result.is_ok(),
+            "expected clean analyze; got errors: {:?}",
+            result.err()
+        );
+    }
+
+    fn assert_taint_violations(source: &str, expected: usize) {
+        let errs = analyze(source).expect_err("expected taint violations");
+        let actual = count_taint_violations(&errs);
+        assert_eq!(
+            actual, expected,
+            "expected exactly {expected} taint violations; got {actual}. all errors: {:?}",
+            errs
+        );
+    }
+
+    // ---- Positive cases ------------------------------------------------
+
+    #[test]
+    fn test_taint_positive_no_annotations_anywhere() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_trusted_param_into_prompt() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@trusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_untrusted_then_through_fn_then_sanitize() {
+        // `redact` returns join-of-arg-taints (Untrusted). The flow then
+        // sanitizes before calling the llm fn. Result must be clean.
+        let source = r#"
+            fn redact(s: string) -> string {
+                return s;
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let raw = redact(input);
+                let cleaned = sanitize(raw);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_sanitize_result_reused_multiple_times() {
+        let source = r#"
+            llm fn first(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            llm fn second(y: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{y}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let cleaned = sanitize(input);
+                let a = first(cleaned);
+                let b = second(cleaned);
+                return b;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_nested_sanitize() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let out = echo(sanitize(sanitize(input)));
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_untrusted_via_field_then_sanitize() {
+        let source = r#"
+            struct Request {
+                @untrusted user_text: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let cleaned = sanitize(req.user_text);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_unmarked_field_is_unknown() {
+        // Field has no decorators -> Unknown -> not a violation.
+        let source = r#"
+            struct Request {
+                payload: string
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let out = echo(req.payload);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    // ---- Negative cases ------------------------------------------------
+
+    #[test]
+    fn test_taint_negative_untrusted_param_directly_in_prompt() {
+        // The llm fn's own `@untrusted` parameter is referenced in its
+        // prompt template. Violation reported at the param site, not at
+        // the call site.
+        let source = r#"
+            llm fn bad(@untrusted q: string) -> string {
+                model: "gpt-4o",
+                prompt: "Answer: {{q}}"
+            }
+            flow run(input: string) -> string {
+                let out = bad(input);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_let_then_prompt() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let x = input;
+                let out = echo(x);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_struct_field_into_prompt() {
+        let source = r#"
+            struct Request {
+                @untrusted user_text: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let out = echo(req.user_text);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_through_regular_fn_into_prompt() {
+        // Regular fn returns join-of-arg-taints; here it propagates
+        // Untrusted to the prompt without sanitization.
+        let source = r#"
+            fn passthrough(s: string) -> string {
+                return s;
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let y = passthrough(input);
+                let out = echo(y);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_two_untrusted_params_used_in_prompt() {
+        // Both params are `@untrusted` and both are referenced in the
+        // prompt. Pass 6 should report a violation per param (2 total).
+        let source = r#"
+            llm fn join(@untrusted a: string, @untrusted b: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{a}} / {{b}}"
+            }
+        "#;
+        assert_taint_violations(source, 2);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_in_else_branch() {
+        // The else branch routes untrusted into the prompt while the
+        // then branch sanitizes. The else-branch's call site is the
+        // violation regardless of branch reachability.
+        //
+        // Note: the condition is parenthesized so the parser does not
+        // mistake `flag {` for a struct-literal opening brace.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string, flag: bool) -> string {
+                if (flag) {
+                    let cleaned = sanitize(input);
+                    let a = echo(cleaned);
+                } else {
+                    let b = echo(input);
+                }
+                return "done";
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_sanitize_applied_to_wrong_arg() {
+        // sanitize is called but on a different value than the one that
+        // reaches the prompt. The prompt path is still tainted.
+        let source = r#"
+            llm fn join(a: string, b: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{a}} / {{b}}"
+            }
+            flow run(@untrusted bad: string, good: string) -> string {
+                let cleaned_good = sanitize(good);
+                let out = join(bad, cleaned_good);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_via_context_field_into_prompt() {
+        let source = r#"
+            context Session {
+                @untrusted last_user_msg: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(session: Session) -> string {
+                let out = echo(session.last_user_msg);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    // ---- Tricky / edge cases ------------------------------------------
+
+    #[test]
+    fn test_taint_edge_conflicting_decorators_on_param() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@trusted @untrusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        let errs = analyze(source).expect_err("conflicting decorators must error");
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::ConflictingTaintDecorators { name, .. } if name == "input")),
+            "expected ConflictingTaintDecorators on input, got: {:?}",
+            errs
+        );
+    }
+
+    #[test]
+    fn test_taint_edge_unknown_decorator_silently_ignored() {
+        // Unknown decorators are silently ignored to match existing
+        // decorator handling in the parser. The program must compile
+        // clean even though the user might have intended `@untrusted`.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted_typo input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_sanitize_recovers_after_join() {
+        // Even when an intermediate binding inherits Untrusted via join,
+        // wrapping the final result in sanitize makes it Trusted.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted a: string, @trusted b: string) -> string {
+                let mixed = a;
+                let out = echo(sanitize(mixed));
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_fn_call_to_non_llm_is_not_a_violation_site() {
+        // Calling a regular fn with untrusted input is not by itself a
+        // violation — only when the result reaches an llm fn prompt.
+        let source = r#"
+            fn store(s: string) -> string {
+                return s;
+            }
+            flow run(@untrusted input: string) -> string {
+                let _ = store(input);
+                return input;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_nested_field_access_inherits_field_taint() {
+        // FieldAccess on a struct whose field is `@untrusted` produces
+        // an Untrusted value even when the surrounding struct-typed
+        // variable has no decorator of its own.
+        let source = r#"
+            struct Inner {
+                @untrusted secret: string
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(inner: Inner) -> string {
+                let out = echo(inner.secret);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
 }

@@ -17,6 +17,28 @@ We make four contributions: (1) a type system spanning LLM inputs, outputs, and 
 **Keywords**: domain-specific languages, large language models, type systems, workflow orchestration, static analysis
 
 
+> **Reproducibility.** Every numeric claim in this paper is traceable to a JSON file in `bench/results/` produced by a specific run. The full inventory:
+>
+> | File | git_version (or library) | Provider | Scope | Trials | `measured_at` |
+> | --- | --- | --- | --- | ---: | --- |
+> | `bench/results/aether_mock_v1.json` | `4d16ec5cd5cb0957d7dc6408b5df25ba7befbe9b` | mock | customer_support_100 + document_analysis_50; sequential / parallel / parallel_cached | 5 | 2026-05-03T09:49:57Z |
+> | `bench/results/langchain_v1.json` | `9591852f9ebb34822dc628197d47cb643c0ac381` (langchain 0.3.28) | mock | same | 5 | 2026-05-04T05:18:25Z |
+> | `bench/results/dspy_v1.json` | `558df452e1e9c36d35bdbc474369862a631c458c` (dspy 2.6.27) | mock | same | 5 | 2026-05-08T02:37:56Z |
+> | `bench/results/aether_real_api_v1.json` | `9c8001ce269920c98fa733a82b3c69ea7352e37e` | openai (gpt-4o-mini) | same | 3 | 2026-05-08T06:29:58Z |
+> | `bench/results/langchain_real_api_v1.json` | langchain 0.3.28 | openai | same | 3 | 2026-05-08 |
+> | `bench/results/dspy_real_api_v1.json` | dspy 2.6.27 | openai | same | 3 | 2026-05-08 |
+> | `bench/results/real_api_v1.json` | merged | openai | both datasets, all 3 systems, end-to-end cost | — | 2026-05-08T09:26:39Z |
+> | `bench/results/ablation_cache_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | mock | customer_support_100 + customer_support_repeat_100; no_cache / l1_exact_match / repeat_warm | 5 | 2026-05-08T13:05:22Z |
+> | `bench/results/ablation_parallel_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | mock | customer_support_100 + document_analysis_50; sequential vs parallel; paired BCa speedup | 5 | 2026-05-08T13:09:48Z |
+> | `bench/results/ablation_typesafety_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | n/a (compile-time + mock LLM) | 30-case error-injection corpus across 4 buckets | n/a | 2026-05-08T13:15:35Z |
+> | `bench/results/security_v1.json` | `2759f1e7f5e26eb435f3c98951ea1fcf193f2b5e` | openai (gpt-4o-mini) | InjecAgent-adapted, 20 attack + 20 benign cases × 3 trials × 3 configs | 3 | 2026-05-08T18:41:38Z |
+> | `bench/results/hotpotqa_aether_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | hotpotqa_dev_500 (latency only; mock LLM does not produce real answers) | 3 | 2026-05-08T10:09:11Z |
+> | `bench/results/hotpotqa_langchain_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | same | 3 | 2026-05-08T10:12:13Z |
+> | `bench/results/hotpotqa_dspy_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | same | 3 | 2026-05-08 |
+>
+> Reproduction: clone the repo at the listed commit, install `aether-runtime` with the `llm-api` feature for real-API runs, and invoke `scripts/run_benchmark.py` (mock) or `scripts/run_real_api_benchmark.sh` (OpenAI) per Section 13. Markdown summaries of the real-API run and the ablation suite are at `bench/results/REAL_API.md` and `bench/results/ablations_v1.md`.
+
+
 ## 1. Introduction
 
 Large language models are increasingly deployed in production systems, yet the engineering practices for integrating them remain ad hoc. Developers face fragile prompt chains, unpredictable outputs, absent testing methodologies, and significant operational costs. Existing solutions address these problems piecemeal: orchestration frameworks like LangChain provide flexibility without compile-time safety, while typed output libraries like BAML focus narrowly on schema validation.

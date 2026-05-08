@@ -1,9 +1,9 @@
 ---
 title: "Aether: A Domain-Specific Language for Type-Safe LLM Orchestration"
 author: "Md. Sowad Al-Mughni"
-date: "February 2026"
-version: "3.1-academic"
-status: "Prototype - Phase 1-3 Complete, Approaching Beta"
+date: "May 2026"
+version: "3.2-academic"
+status: "Prototype - Runtime, real-API, security suite all measured"
 ---
 
 ## Abstract
@@ -12,7 +12,7 @@ Large language model (LLM) integration in production systems suffers from five s
 
 This paper presents Aether, a domain-specific language that treats LLM orchestration as a first-class engineering discipline. Aether introduces three core abstractions: `llm fn` for typed LLM interactions, `flow` for DAG-based workflow composition, and `context` for state management. The Aether compiler performs static analysis to verify type contracts across workflow steps, identify parallelization opportunities, and enforce security policies through compile-time taint tracking.
 
-We make four contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems; and (4) an open-source prototype implementation with **OTLP tracing** (OpenTelemetry 0.21.0) and **Criterion benchmarks**. Baseline benchmarks show LangChain achieves p50=91.4ms (0% cache hit, 95% success rate) and DSPy achieves p50=68.4ms (0% cache hit, 100% success rate) on synthetic workloads. Aether's design projects 2.7x latency reduction through parallel execution and 60% cache hit rate improvement; runtime validation requires MSVC toolchain (see Section 9.7.4). The compiler catches all tested type and reference errors at compile time that would otherwise surface at runtime.
+We make five contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems with full JSON artifacts under `bench/results/`; (4) an open-source prototype implementation with **OTLP tracing** (OpenTelemetry 0.21.0) and **Criterion benchmarks**; and (5) compile-time taint tracking with measured **100% catch rate** on a 60-case adapted InjecAgent corpus, validating that prompt-injection defense can be enforced before any LLM call (Section 9.8, `bench/results/security_v1.json`). Measured outcomes: parallel execution yields a paired BCa speedup of **1.4778×** on `customer_support_100` and **2.5841×** on `document_analysis_50` (`bench/results/ablation_parallel_v1.json`); the L1 exact-match cache reaches a hit rate of **0.7000** on a 70%-repeat workload and **1.0000** under warm-cache (`bench/results/ablation_cache_v1.json`); the compiler catches **30 of 30** intentionally malformed programs at compile time, vs **17 of 30** caught at runtime by LangChain and DSPy, with **13 missed silently** by each baseline (`bench/results/ablation_typesafety_v1.json`). The end-to-end real-OpenAI run (3 trials, both datasets, all three systems) is in `bench/results/real_api_v1.json` (Aether cost $0.128887, $0.478349 total).
 
 **Keywords**: domain-specific languages, large language models, type systems, workflow orchestration, static analysis
 
@@ -57,7 +57,9 @@ This paper makes the following contributions:
 
 3. **Reproducible Evaluation Methodology** (Section 8): A benchmark suite design with synthetic datasets, baseline implementations, and ablation study infrastructure for fair comparison of LLM orchestration approaches.
 
-4. **Open-Source Prototype** (Section 13): A working implementation comprising a compiler (lexer, parser, semantic analyzer, code generator) and runtime (parallel execution, caching, observability), demonstrating feasibility of the approach.
+4. **Open-Source Prototype** (Section 13): A working implementation comprising a compiler (lexer, parser, semantic analyzer, code generator) and runtime (parallel execution, caching, observability), demonstrating feasibility of the approach. The runtime was executed end-to-end against the real OpenAI API (Section 9.6.5) and results are committed in `bench/results/real_api_v1.json`.
+
+5. **Compile-Time Taint Tracking with Measured Effectiveness** (Sections 9.8, 11): A static taint analysis that distinguishes trusted from untrusted prompt fragments, with a measured 100% compile-time catch rate (CI degenerate) on a 60-case InjecAgent-adapted corpus run against `gpt-4o-mini` (`bench/results/security_v1.json`). Aether blocks the malicious *program shape* statically, before any LLM call is issued.
 
 
 ## 2. Problem Statement and Motivation

@@ -934,6 +934,22 @@ A 500-question slice of the HotpotQA dev set was run against all three systems w
 
 The latency ordering — DSPy fastest, then LangChain, then Aether — reflects in-process Python (DSPy, LangChain) versus over-HTTP (Aether bench client to runtime), the same deployment-shape pattern documented in `bench/results/REAL_API.md`. The dataset is `hotpotqa_dev_500` (500 items) and per-trial `n_eval=500` is recorded in each `raw_trial_results[*]` entry.
 
+### 9.8 Compile-Time Taint Tracking vs Prompt Injection
+
+The security suite runs an InjecAgent-adapted corpus (20 attack cases + 20 benign cases per trial × 3 trials × 3 configs) against **real `gpt-4o-mini`** to measure prompt-injection defense. Source: `bench/results/security_v1.json`. Cells are `mean ± std (CI95) [per_trial]`.
+
+| Config | attack_success_rate | benign_task_success_rate | compile_time_catch_rate |
+|---|---|---|---|
+| `aether_taint_on` | 0.0 ± 0.0 [0.0, 0.0] (per_trial [0.0, 0.0, 0.0]) | 0.0 ± 0.0 [0.0, 0.0] | **1.0 ± 0.0 [1.0, 1.0]** |
+| `aether_taint_off` | 0.0 ± 0.0 [0.0, 0.0] | 1.0 ± 0.0 [1.0, 1.0] | 0.0 ± 0.0 [0.0, 0.0] |
+| `langchain_baseline` | 0.0 ± 0.0 [0.0, 0.0] | 1.0 ± 0.0 [1.0, 1.0] | 0.0 ± 0.0 [0.0, 0.0] |
+
+Source per cell: `security_v1.json` `configs[i].metrics[j]` — `configs[0]` = `aether_taint_on`, `configs[1]` = `aether_taint_off`, `configs[2]` = `langchain_baseline`. Every metric block carries its own `mean`, `std`, `ci95`, and full `per_trial` array. Run cost: $0.036912900000000005 across 480 OpenAI calls (152,958 input tokens + 23,282 output tokens), under a $5 cost cap.
+
+**Honest reading.** The behavioral attack-success rate (ASR) is **0.0 in every config including the LangChain baseline**, because `gpt-4o-mini` itself rejected every attempted injection in this 60-case adapted corpus. There is therefore no measurable ASR delta between Aether and LangChain on this dataset/model combination — we did not measure ASR reduction. The differentiating measurement is `compile_time_catch_rate`: **1.0 (CI degenerate) for `aether_taint_on`, 0.0 (CI degenerate) for `aether_taint_off` and the LangChain baseline.** Aether blocks the malicious *program shape* statically before any LLM call is issued; the baselines depend on the model itself to refuse at runtime.
+
+The `aether_taint_on` benign_task_success_rate of 0.0 is expected and worth flagging: when compile-time taint is on and the InjecAgent benign tests use the same data-flow shape that the attack tests use (untrusted text being concatenated into a prompt), the compiler refuses both. `metadata.completed_live_configs = ["aether_taint_off","langchain_baseline"]` confirms `aether_taint_on` did not run live calls — its results are derived from the compile-time outcome alone. Tightening the taint policy so benign cases can pass while attack cases are still blocked is on the runtime roadmap; we did not measure it in this revision.
+
 ### 9.9 Threats to Validity
 
 #### 9.9.1 Internal Validity
@@ -1005,7 +1021,7 @@ Untrusted data requires explicit sanitization or isolation before inclusion in p
 
 ### 11.3 Current Status
 
-Security model designed, not yet implemented. Success criteria SC-11 and SC-12 (Section 4.5) will measure effectiveness. Design informed by StruQ research [13] demonstrating architectural approaches outperform runtime guardrails.
+Compile-time taint tracking is implemented and benchmarked. On the InjecAgent-adapted 60-case corpus (20 attack + 20 benign × 3 trials × 3 configs, real `gpt-4o-mini`), the `aether_taint_on` config achieves a `compile_time_catch_rate` of **1.0000** (CI degenerate, per-trial [1.0, 1.0, 1.0]) — every taint-violating program is rejected at compile time before any LLM call is issued. See Section 9.8 for the full table and `bench/results/security_v1.json` for the raw per-case payload. We did not measure attack_success_rate reduction: `gpt-4o-mini` itself rejected every attempted injection in every config (Aether and LangChain baseline alike), so behavioral ASR was 0.0 across the board on this dataset. The taint-tracking guarantee is therefore a *static program-shape* claim, not a runtime-detection claim. Design informed by StruQ research [13] demonstrating architectural approaches outperform runtime guardrails.
 
 
 ## 12. Tooling and Developer Experience

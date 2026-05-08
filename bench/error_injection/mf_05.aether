@@ -1,0 +1,17 @@
+// mf_05: ArgumentCountMismatch — calling a 2-arg LLM fn with 3 args.
+
+llm fn join(a: string, b: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Join: {{a}} + {{b}}"
+}
+
+llm fn step(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Step: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let s = step(input);
+    let r = join(s, input, input);
+    return r;
+}

@@ -1,0 +1,18 @@
+// tm_04: TypeMismatch — flow returns enum value where struct expected.
+
+enum Sentiment { Positive, Neutral, Negative }
+
+struct Report {
+    text: string,
+    score: int
+}
+
+llm fn classify(text: string) -> Sentiment {
+    model: "gpt-4o-mini",
+    prompt: "Classify: {{text}}"
+}
+
+flow run(input: string) -> Report {
+    let s = classify(input);
+    return s;
+}

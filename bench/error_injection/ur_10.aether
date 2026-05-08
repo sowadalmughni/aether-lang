@@ -1,0 +1,12 @@
+// ur_10: UndefinedSymbol — return statement references a result variable
+// the author intended to bind but accidentally referenced under a different name.
+
+llm fn shape(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Shape: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let outcome = shape(input);
+    return outcomes;
+}

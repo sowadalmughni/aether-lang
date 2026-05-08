@@ -1,0 +1,16 @@
+// dd_01: DuplicateDefinition — two LLM functions share the same name.
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify A: {{text}}"
+}
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify B: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let r = classify(input);
+    return r;
+}

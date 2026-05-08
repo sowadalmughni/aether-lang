@@ -1,0 +1,11 @@
+// tm_02: TypeMismatch — list<string> assigned where string expected.
+
+llm fn extract(text: string) -> list<string> {
+    model: "gpt-4o-mini",
+    prompt: "Extract entities: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let entities = extract(input);
+    return entities;
+}

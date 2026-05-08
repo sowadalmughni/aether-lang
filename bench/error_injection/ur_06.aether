@@ -1,0 +1,12 @@
+// ur_06: UndefinedSymbol — second let-binding references a never-declared symbol.
+
+llm fn step(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Step: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let a = step(input);
+    let b = step(unbound_intermediate);
+    return b;
+}

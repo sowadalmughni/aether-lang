@@ -1,0 +1,11 @@
+// dd_04: DuplicateParameter — function parameter declared twice.
+
+llm fn answer(question: string, question: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Q: {{question}}"
+}
+
+flow run(input: string) -> string {
+    let r = answer(input, input);
+    return r;
+}

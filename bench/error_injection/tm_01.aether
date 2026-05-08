@@ -1,0 +1,17 @@
+// tm_01: TypeMismatch — flow returns a string literal where struct is expected.
+// Expected: aetherc check fails with TypeMismatch (expected 'Result', found 'string').
+
+struct Result {
+    answer: string,
+    confidence: int
+}
+
+llm fn classify(text: string) -> Result {
+    model: "gpt-4o-mini",
+    prompt: "Classify: {{text}}"
+}
+
+flow analyze(input: string) -> Result {
+    let r = classify(input);
+    return "wrong return type";
+}

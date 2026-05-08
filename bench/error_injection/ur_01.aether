@@ -1,0 +1,13 @@
+// ur_01: UndefinedSymbol/UndefinedFunction — flow calls a function that does not exist.
+// Expected: aetherc check fails with UndefinedFunction.
+
+llm fn summarize(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Summarize: {{text}}"
+}
+
+flow analyze(input: string) -> string {
+    let s = summarize(input);
+    let t = nonexistent_function(s);
+    return t;
+}

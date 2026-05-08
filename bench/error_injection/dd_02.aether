@@ -1,0 +1,21 @@
+// dd_02: DuplicateDefinition — two structs share the same name.
+
+struct Profile {
+    name: string,
+    age: int
+}
+
+struct Profile {
+    handle: string,
+    score: int
+}
+
+llm fn build(text: string) -> Profile {
+    model: "gpt-4o-mini",
+    prompt: "Build: {{text}}"
+}
+
+flow run(input: string) -> Profile {
+    let p = build(input);
+    return p;
+}

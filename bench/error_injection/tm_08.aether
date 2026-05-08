@@ -1,0 +1,11 @@
+// tm_08: TypeMismatch — list<int> declared but list<string> produced.
+
+llm fn extract_ids(text: string) -> list<string> {
+    model: "gpt-4o-mini",
+    prompt: "Extract IDs: {{text}}"
+}
+
+flow run(input: string) -> list<int> {
+    let ids = extract_ids(input);
+    return ids;
+}

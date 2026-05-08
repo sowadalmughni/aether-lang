@@ -1,0 +1,13 @@
+// tm_07: TypeMismatch — enum value returned from flow declared to return string.
+
+enum Status { Ok, Error, Pending }
+
+llm fn check(text: string) -> Status {
+    model: "gpt-4o-mini",
+    prompt: "Check: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let s = check(input);
+    return s;
+}

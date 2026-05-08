@@ -1,0 +1,11 @@
+// ur_08: UndefinedSymbol — variable used before any declaration.
+
+llm fn step(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Step: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let r = step(unseen);
+    return r;
+}

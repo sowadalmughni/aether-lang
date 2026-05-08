@@ -1,0 +1,11 @@
+// ur_02: UndefinedSymbol — flow returns variable that was never declared.
+
+llm fn summarize(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Summarize: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let s = summarize(input);
+    return result;
+}

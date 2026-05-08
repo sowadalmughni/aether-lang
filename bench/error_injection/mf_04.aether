@@ -1,0 +1,16 @@
+// mf_04: UnknownField — accessing a misspelled field name.
+
+struct Order {
+    id: string,
+    total: int
+}
+
+llm fn build_order(text: string) -> Order {
+    model: "gpt-4o-mini",
+    prompt: "Build order: {{text}}"
+}
+
+flow run(input: string) -> int {
+    let o = build_order(input);
+    return o.totl;
+}

@@ -1,0 +1,17 @@
+// tm_03: TypeMismatch — passing list<string> where string expected as arg.
+
+llm fn extract(text: string) -> list<string> {
+    model: "gpt-4o-mini",
+    prompt: "Extract: {{text}}"
+}
+
+llm fn summarize(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Summarize: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let parts = extract(input);
+    let s = summarize(parts);
+    return s;
+}

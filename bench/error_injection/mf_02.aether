@@ -1,0 +1,11 @@
+// mf_02: ArgumentCountMismatch — calling LLM fn with too few args.
+
+llm fn answer(question: string, ctx: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Q: {{question}}\nC: {{ctx}}"
+}
+
+flow run(input: string) -> string {
+    let r = answer(input);
+    return r;
+}

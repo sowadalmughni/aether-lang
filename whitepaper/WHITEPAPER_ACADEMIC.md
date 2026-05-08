@@ -1382,23 +1382,25 @@ This appendix provides detailed status for all implemented components.
 | Lexer | Complete | 100% | logos crate, all tokens |
 | Parser | Complete | ~95% | 1900 lines, recursive descent |
 | Semantic Analyzer | Complete | ~90% | 5-pass, 15+ error types |
+| Taint tracking | Implemented | Measured | 100% compile-time catch on InjecAgent-adapted corpus (`security_v1.json` `configs[0].metrics[2].mean=1.0`); see Section 9.8 |
 | DAG Code Generator | Complete | ~85% | JSON output, template_refs |
 | Optimizer | Not started | - | Planned for Phase 2 |
 | Native Code Gen | Not started | - | Python/Rust backends planned |
+| `SemanticError::CircularDependency` | Defined but not emitted | — | Variant exists in `aether-compiler/src/semantic.rs` but never reached in current pass ordering; tracked at https://github.com/sowadalmughni/aether-lang/issues/4 (per `ablation_typesafety_v1.json` `methodology_notes.cd_substitution`) |
 
 ### B.2 Runtime Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | HTTP Server | Complete | Axum, async handlers |
-| DAG Executor | Complete | Parallel + sequential modes |
-| Exact-Match Cache | Complete | LRU, SHA256 keys |
-| Semantic Cache | Not started | Requires embedding integration |
+| DAG Executor | Complete | Parallel + sequential modes; measured 1.4778× / 2.5841× speedup (Section 9.2) |
+| Exact-Match Cache | Complete | LRU, SHA256 keys; measured hit rates 0.7000 (l1) / 1.0000 (warm) on repeat workloads (Section 9.3) |
+| Semantic Cache | Not started | Requires embedding integration; no `*_semantic_cache_*` config exists in any `bench/results/` JSON |
 | Context Store | MVP | InMemory only |
 | Template Engine | Complete | All placeholder types |
-| Mock LLM Client | Complete | Configurable latency |
-| OpenAI Client | Implemented | Feature flag |
-| Anthropic Client | Implemented | Feature flag |
+| Mock LLM Client | Complete | Configurable latency (50 ms flat across all `bench/results/*_mock_*` JSONs) |
+| OpenAI Client | Implemented & benchmarked | Real-API run produced `aether_real_api_v1.json` (3 trials × 3 configs × 2 datasets, $0.128887 cost); merged into `real_api_v1.json` |
+| Anthropic Client | Implemented | Feature flag; not exercised in this paper revision |
 | Observability | Complete | Tracing (OTLP), Prometheus metrics, Criterion benchmarks |
 
 ### B.3 Tooling Status
@@ -1406,10 +1408,10 @@ This appendix provides detailed status for all implemented components.
 | Tool | Status | Notes |
 |------|--------|-------|
 | DAG Visualizer | Complete | React + Cytoscape |
-| CI/Benchmark | Complete | GitHub Actions |
+| CI/Benchmark | Complete | GitHub Actions; produces JSONs under `bench/results/` |
 | LSP Server | Not started | Planned for Phase 2 |
 | REPL | Not started | Planned for Phase 2 |
-| Documentation | Partial | README, docstrings |
+| Documentation | Partial | README, docstrings, `bench/results/REAL_API.md`, `bench/results/ablations_v1.md` |
 
 ### B.4 Test Infrastructure
 
@@ -1417,4 +1419,4 @@ This appendix provides detailed status for all implemented components.
 |----------|-------|----------|
 | Unit tests (Rust) | ~150 | Core modules |
 | Integration tests | ~30 | E2E flows |
-| Benchmark datasets | 2 | CustomerSupport-100, DocumentAnalysis-50 |
+| Benchmark datasets | 5 | `CustomerSupport-100`, `DocumentAnalysis-50`, `customer_support_repeat_100` (cache ablation), `hotpotqa_dev_500` (latency only, mock), InjecAgent-adapted (security, real OpenAI) — each backed by a JSON in `bench/results/` |

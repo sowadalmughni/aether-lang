@@ -1,0 +1,11 @@
+// ur_03: UndefinedSymbol — let-binding rhs references a variable that does not exist.
+
+llm fn echo(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Echo: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let r = echo(ghost_value);
+    return r;
+}

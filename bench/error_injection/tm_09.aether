@@ -1,0 +1,19 @@
+// tm_09: TypeMismatch — list<string> passed where struct expected.
+
+struct Bundle { body: string }
+
+llm fn extract(text: string) -> list<string> {
+    model: "gpt-4o-mini",
+    prompt: "Extract: {{text}}"
+}
+
+llm fn finalize(bundle: Bundle) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Finalize: {{bundle}}"
+}
+
+flow run(input: string) -> string {
+    let parts = extract(input);
+    let r = finalize(parts);
+    return r;
+}

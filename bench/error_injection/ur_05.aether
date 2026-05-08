@@ -1,0 +1,17 @@
+// ur_05: UndefinedFunction — chained flow calls a typoed function name.
+
+llm fn summarize(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Summarize: {{text}}"
+}
+
+llm fn polish(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Polish: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let s = summarize(input);
+    let p = polishe(s);
+    return p;
+}

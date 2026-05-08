@@ -1,0 +1,17 @@
+// dd_03: DuplicateField — struct declares the same field name twice.
+
+struct Account {
+    id: string,
+    name: string,
+    name: string
+}
+
+llm fn build(text: string) -> Account {
+    model: "gpt-4o-mini",
+    prompt: "Build: {{text}}"
+}
+
+flow run(input: string) -> Account {
+    let a = build(input);
+    return a;
+}

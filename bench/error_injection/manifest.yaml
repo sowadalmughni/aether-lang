@@ -1,0 +1,266 @@
+# Error-injection corpus for the type-safety ablation.
+#
+# Each entry pairs an .aether file with two Python equivalents (LangChain and
+# DSPy) that mirror the same logical bug. The type-safety ablation runner reads
+# this manifest, runs `aetherc check` on every .aether file, runs each Python
+# equivalent as a subprocess, and emits a per-bug breakdown into
+# bench/results/ablation_typesafety_v1.json.
+#
+# Buckets:
+#   type_mismatch        (10) - SemanticError::TypeMismatch
+#   undefined_reference  (10) - SemanticError::UndefinedSymbol / UndefinedFunction
+#   missing_field        ( 5) - SemanticError::UnknownField / ArgumentCountMismatch
+#   duplicate_definition ( 5) - SemanticError::DuplicateDefinition / DuplicateField /
+#                                DuplicateParameter / DuplicateVariant
+# Total: 30. The original spec called for `circular_dependency` instead of
+# `duplicate_definition`; that substitution and its rationale are documented
+# in https://github.com/sowadalmughni/aether-lang/issues/4 and in the
+# methodology footer of bench/results/ablations_v1.md.
+#
+# expected_python_detection legend:
+#   runtime         - Python is expected to raise an exception when the bug is exercised.
+#   silent          - Python is expected to complete without raising; output is wrong but no signal.
+#   either          - either outcome is plausible depending on framework version / mock LLM.
+# The runner records the *actual* observed behavior; this field documents
+# author intent only.
+
+corpus:
+  - id: tm_01
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Flow returns a string literal where a struct is expected."
+    python_lc_path: lc/tm_01.py
+    python_dspy_path: dspy/tm_01.py
+    expected_python_detection: silent
+
+  - id: tm_02
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Flow returns list<string> where string is declared."
+    python_lc_path: lc/tm_02.py
+    python_dspy_path: dspy/tm_02.py
+    expected_python_detection: silent
+
+  - id: tm_03
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Pass list<string> as argument where string is required."
+    python_lc_path: lc/tm_03.py
+    python_dspy_path: dspy/tm_03.py
+    expected_python_detection: silent
+
+  - id: tm_04
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Flow returns enum value where struct is declared."
+    python_lc_path: lc/tm_04.py
+    python_dspy_path: dspy/tm_04.py
+    expected_python_detection: silent
+
+  - id: tm_05
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Flow returns plain string where Item struct is expected."
+    python_lc_path: lc/tm_05.py
+    python_dspy_path: dspy/tm_05.py
+    expected_python_detection: silent
+
+  - id: tm_06
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Return Wrapped struct where its inner string field type is expected."
+    python_lc_path: lc/tm_06.py
+    python_dspy_path: dspy/tm_06.py
+    expected_python_detection: silent
+
+  - id: tm_07
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Return enum value where flow declares string output."
+    python_lc_path: lc/tm_07.py
+    python_dspy_path: dspy/tm_07.py
+    expected_python_detection: silent
+
+  - id: tm_08
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Return list<string> where flow declares list<int>."
+    python_lc_path: lc/tm_08.py
+    python_dspy_path: dspy/tm_08.py
+    expected_python_detection: either
+
+  - id: tm_09
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Pass list<string> where Bundle struct argument is required."
+    python_lc_path: lc/tm_09.py
+    python_dspy_path: dspy/tm_09.py
+    expected_python_detection: silent
+
+  - id: tm_10
+    bucket: type_mismatch
+    expected_aether_error_classes: [TypeMismatch]
+    description: "Pass UserMessage struct where SystemMessage struct is expected (different shape with same field names)."
+    python_lc_path: lc/tm_10.py
+    python_dspy_path: dspy/tm_10.py
+    expected_python_detection: silent
+
+  - id: ur_01
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol, UndefinedFunction]
+    description: "Flow calls a function that does not exist."
+    python_lc_path: lc/ur_01.py
+    python_dspy_path: dspy/ur_01.py
+    expected_python_detection: runtime
+
+  - id: ur_02
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Flow returns a variable that was never bound."
+    python_lc_path: lc/ur_02.py
+    python_dspy_path: dspy/ur_02.py
+    expected_python_detection: runtime
+
+  - id: ur_03
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Let-binding rhs references a symbol that does not exist."
+    python_lc_path: lc/ur_03.py
+    python_dspy_path: dspy/ur_03.py
+    expected_python_detection: runtime
+
+  - id: ur_04
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol, UndefinedFunction]
+    description: "Middle of a 3-step pipeline calls a missing function."
+    python_lc_path: lc/ur_04.py
+    python_dspy_path: dspy/ur_04.py
+    expected_python_detection: runtime
+
+  - id: ur_05
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol, UndefinedFunction]
+    description: "Function call uses a typoed name (Did-you-mean candidate exists)."
+    python_lc_path: lc/ur_05.py
+    python_dspy_path: dspy/ur_05.py
+    expected_python_detection: runtime
+
+  - id: ur_06
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Second let-binding references a never-declared symbol."
+    python_lc_path: lc/ur_06.py
+    python_dspy_path: dspy/ur_06.py
+    expected_python_detection: runtime
+
+  - id: ur_07
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Second flow's first statement references an undefined name."
+    python_lc_path: lc/ur_07.py
+    python_dspy_path: dspy/ur_07.py
+    expected_python_detection: runtime
+
+  - id: ur_08
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Function argument references an undefined identifier."
+    python_lc_path: lc/ur_08.py
+    python_dspy_path: dspy/ur_08.py
+    expected_python_detection: runtime
+
+  - id: ur_09
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol, UndefinedFunction]
+    description: "Second flow calls a helper that is never declared."
+    python_lc_path: lc/ur_09.py
+    python_dspy_path: dspy/ur_09.py
+    expected_python_detection: runtime
+
+  - id: ur_10
+    bucket: undefined_reference
+    expected_aether_error_classes: [UndefinedSymbol]
+    description: "Return statement references a typoed variable name."
+    python_lc_path: lc/ur_10.py
+    python_dspy_path: dspy/ur_10.py
+    expected_python_detection: runtime
+
+  - id: mf_01
+    bucket: missing_field
+    expected_aether_error_classes: [UnknownField]
+    description: "Flow accesses a struct field that was not declared."
+    python_lc_path: lc/mf_01.py
+    python_dspy_path: dspy/mf_01.py
+    expected_python_detection: runtime
+
+  - id: mf_02
+    bucket: missing_field
+    expected_aether_error_classes: [ArgumentCountMismatch]
+    description: "Caller passes too few args to a 2-arg LLM function."
+    python_lc_path: lc/mf_02.py
+    python_dspy_path: dspy/mf_02.py
+    expected_python_detection: runtime
+
+  - id: mf_03
+    bucket: missing_field
+    expected_aether_error_classes: [UnknownField]
+    description: "Access nested struct field that does not exist on the inner type."
+    python_lc_path: lc/mf_03.py
+    python_dspy_path: dspy/mf_03.py
+    expected_python_detection: runtime
+
+  - id: mf_04
+    bucket: missing_field
+    expected_aether_error_classes: [UnknownField]
+    description: "Access misspelled field name on an existing struct."
+    python_lc_path: lc/mf_04.py
+    python_dspy_path: dspy/mf_04.py
+    expected_python_detection: runtime
+
+  - id: mf_05
+    bucket: missing_field
+    expected_aether_error_classes: [ArgumentCountMismatch]
+    description: "Caller passes too many args to a 2-arg LLM function."
+    python_lc_path: lc/mf_05.py
+    python_dspy_path: dspy/mf_05.py
+    expected_python_detection: runtime
+
+  - id: dd_01
+    bucket: duplicate_definition
+    expected_aether_error_classes: [DuplicateDefinition]
+    description: "Two LLM functions share the same name."
+    python_lc_path: lc/dd_01.py
+    python_dspy_path: dspy/dd_01.py
+    expected_python_detection: silent
+
+  - id: dd_02
+    bucket: duplicate_definition
+    expected_aether_error_classes: [DuplicateDefinition]
+    description: "Two structs share the same name."
+    python_lc_path: lc/dd_02.py
+    python_dspy_path: dspy/dd_02.py
+    expected_python_detection: silent
+
+  - id: dd_03
+    bucket: duplicate_definition
+    expected_aether_error_classes: [DuplicateField]
+    description: "Struct declares the same field name twice."
+    python_lc_path: lc/dd_03.py
+    python_dspy_path: dspy/dd_03.py
+    expected_python_detection: silent
+
+  - id: dd_04
+    bucket: duplicate_definition
+    expected_aether_error_classes: [DuplicateParameter]
+    description: "Function parameter declared twice."
+    python_lc_path: lc/dd_04.py
+    python_dspy_path: dspy/dd_04.py
+    expected_python_detection: runtime
+
+  - id: dd_05
+    bucket: duplicate_definition
+    expected_aether_error_classes: [DuplicateVariant]
+    description: "Enum declares the same variant twice."
+    python_lc_path: lc/dd_05.py
+    python_dspy_path: dspy/dd_05.py
+    expected_python_detection: silent

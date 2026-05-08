@@ -1,0 +1,14 @@
+// mf_03: UnknownField — accessing a field on the wrong nested struct.
+
+struct Address { city: string, zip: string }
+struct Person { name: string, address: Address }
+
+llm fn build(text: string) -> Person {
+    model: "gpt-4o-mini",
+    prompt: "Build a Person from: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let p = build(input);
+    return p.address.country;
+}

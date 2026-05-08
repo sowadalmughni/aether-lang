@@ -1,0 +1,13 @@
+// tm_05: TypeMismatch — list element built with wrong-typed return.
+
+struct Item { name: string }
+
+llm fn make_item(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Generate item name for: {{text}}"
+}
+
+flow run(input: string) -> Item {
+    let s = make_item(input);
+    return s;
+}

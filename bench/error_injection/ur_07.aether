@@ -1,0 +1,16 @@
+// ur_07: UndefinedSymbol — second flow's first statement references an undefined name.
+
+llm fn shape(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Shape: {{text}}"
+}
+
+flow primary(input: string) -> string {
+    let r = shape(input);
+    return r;
+}
+
+flow secondary(input: string) -> string {
+    let r = shape(missing_input);
+    return r;
+}

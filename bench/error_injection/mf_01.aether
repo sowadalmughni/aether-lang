@@ -1,0 +1,17 @@
+// mf_01: UnknownField — accessing a field that does not exist on the struct.
+// Expected: aetherc check fails with UnknownField (struct 'Profile' has no field 'email').
+
+struct Profile {
+    name: string,
+    age: int
+}
+
+llm fn make_profile(text: string) -> Profile {
+    model: "gpt-4o-mini",
+    prompt: "Extract a profile from: {{text}}"
+}
+
+flow show(input: string) -> string {
+    let p = make_profile(input);
+    return p.email;
+}

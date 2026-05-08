@@ -1,0 +1,13 @@
+// tm_06: TypeMismatch — struct used in place of its inner field type.
+
+struct Wrapped { value: string }
+
+llm fn wrap(text: string) -> Wrapped {
+    model: "gpt-4o-mini",
+    prompt: "Wrap: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let w = wrap(input);
+    return w;
+}

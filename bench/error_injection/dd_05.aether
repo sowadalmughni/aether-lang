@@ -1,0 +1,18 @@
+// dd_05: DuplicateVariant — enum declares the same variant twice.
+
+enum Severity {
+    Low,
+    Medium,
+    High,
+    High
+}
+
+llm fn classify(text: string) -> Severity {
+    model: "gpt-4o-mini",
+    prompt: "Classify severity: {{text}}"
+}
+
+flow run(input: string) -> Severity {
+    let s = classify(input);
+    return s;
+}

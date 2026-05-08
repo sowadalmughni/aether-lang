@@ -1,0 +1,20 @@
+// tm_10: TypeMismatch — struct of one shape passed where struct of another shape expected.
+
+struct UserMessage { body: string }
+struct SystemMessage { body: string }
+
+llm fn shape_user(text: string) -> UserMessage {
+    model: "gpt-4o-mini",
+    prompt: "User: {{text}}"
+}
+
+llm fn deliver_system(msg: SystemMessage) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Deliver: {{msg}}"
+}
+
+flow run(input: string) -> string {
+    let u = shape_user(input);
+    let s = deliver_system(u);
+    return s;
+}

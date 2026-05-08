@@ -89,6 +89,11 @@ pub enum SemanticError {
         reason: String,
     },
 
+    // TODO(#4): variant defined but never emitted. Source-level cycle detection
+    // (self-ref / mutually-recursive structs, let-binding cycles) is not wired
+    // into the semantic pass; the codegen-level cycle detector is preempted by
+    // UndefinedSymbol on real .aether sources. See:
+    // https://github.com/sowadalmughni/aether-lang/issues/4
     #[error("Circular dependency detected involving: {nodes}")]
     CircularDependency { nodes: String, span: Span },
 

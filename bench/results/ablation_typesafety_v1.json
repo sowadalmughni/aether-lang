@@ -1,0 +1,902 @@
+{
+  "system": "aether",
+  "version": "8aee2cce5f969b5e2d84e94216355354dcc0eb7f",
+  "provider": "n/a (compile-time + mock LLM)",
+  "hardware": {
+    "cpu": "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+    "ram_gb": 7.71,
+    "os": "Ubuntu 24.04.4 LTS"
+  },
+  "measured_at": "2026-05-08T13:15:35.649298Z",
+  "buckets": [
+    "type_mismatch",
+    "undefined_reference",
+    "missing_field",
+    "duplicate_definition"
+  ],
+  "test_cases": [
+    {
+      "id": "tm_01",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Flow returns a string literal where a struct is expected.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'Result', found 'string' at line 408, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='wrong return type' type=str"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='wrong return type' type=str"
+      }
+    },
+    {
+      "id": "tm_02",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Flow returns list<string> where string is declared.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'string', found 'list<string>' at line 265, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=['a', 'b', 'c'] type=list"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=['a', 'b', 'c'] type=list"
+      }
+    },
+    {
+      "id": "tm_03",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Pass list<string> as argument where string is required.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'string', found 'list<string>' at line 383, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='mock-output'"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=\"summary-of-['alpha', 'beta']\""
+      }
+    },
+    {
+      "id": "tm_04",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Flow returns enum value where struct is declared.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'Report', found 'Sentiment' at line 351, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=<Sentiment.POSITIVE: 'positive'> type=Sentiment"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=<Sentiment.POSITIVE: 'positive'> type=Sentiment"
+      }
+    },
+    {
+      "id": "tm_05",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Flow returns plain string where Item struct is expected.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'Item', found 'string' at line 289, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='alpha' type=str"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='alpha' type=str"
+      }
+    },
+    {
+      "id": "tm_06",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Return Wrapped struct where its inner string field type is expected.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'string', found 'Wrapped' at line 270, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Wrapped(value='hello') type=Wrapped"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Prediction("
+      }
+    },
+    {
+      "id": "tm_07",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Return enum value where flow declares string output.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'string', found 'Status' at line 285, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=<Status.OK: 1> type=Status"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=<Status.OK: 1> type=Status"
+      }
+    },
+    {
+      "id": "tm_08",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Return list<string> where flow declares list<int>.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'list<int>', found 'list<string>' at line 267, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=['1', '2', '3'] elem_type=str"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=['1', '2', '3'] elem_type=str"
+      }
+    },
+    {
+      "id": "tm_09",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Pass list<string> where Bundle struct argument is required.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'Bundle', found 'list<string>' at line 408, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='mock-output'"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=\"final:['a', 'b']\""
+      }
+    },
+    {
+      "id": "tm_10",
+      "bucket": "type_mismatch",
+      "expected_aether_error_classes": [
+        "TypeMismatch"
+      ],
+      "description": "Pass UserMessage struct where SystemMessage struct is expected (different shape with same field names).",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "TypeMismatch",
+        "stderr_excerpt": "- Type mismatch: expected 'SystemMessage', found 'UserMessage' at line 485, column 0"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='hello'"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='hello'"
+      }
+    },
+    {
+      "id": "ur_01",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol",
+        "UndefinedFunction"
+      ],
+      "description": "Flow calls a function that does not exist.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'nonexistent_function' at line 337, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'nonexistent_function' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'nonexistent_function' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_02",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Flow returns a variable that was never bound.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'result' at line 261, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'result' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'result' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_03",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Let-binding rhs references a symbol that does not exist.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'ghost_value' at line 239, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'ghost_value' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'ghost_value' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_04",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol",
+        "UndefinedFunction"
+      ],
+      "description": "Middle of a 3-step pipeline calls a missing function.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'missing_middle' at line 351, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'missing_middle' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'missing_middle' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_05",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol",
+        "UndefinedFunction"
+      ],
+      "description": "Function call uses a typoed name (Did-you-mean candidate exists).",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'polishe' at line 360, column 0. Did you mean 'polish'?"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'polishe' is not defined. Did you mean: 'polish'?",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'polishe' is not defined. Did you mean: 'polish'?",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_06",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Second let-binding references a never-declared symbol.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'unbound_intermediate' at line 260, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'unbound_intermediate' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'unbound_intermediate' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_07",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Second flow's first statement references an undefined name.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'missing_input' at line 332, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'missing_input' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'missing_input' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_08",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Function argument references an undefined identifier.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'unseen' at line 218, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'unseen' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'unseen' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_09",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol",
+        "UndefinedFunction"
+      ],
+      "description": "Second flow calls a helper that is never declared.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'absent_helper' at line 321, column 0"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'absent_helper' is not defined",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'absent_helper' is not defined",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "ur_10",
+      "bucket": "undefined_reference",
+      "expected_aether_error_classes": [
+        "UndefinedSymbol"
+      ],
+      "description": "Return statement references a typoed variable name.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UndefinedSymbol",
+        "stderr_excerpt": "- Undefined symbol 'outcomes' at line 337, column 0. Did you mean 'outcome'?"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'outcomes' is not defined. Did you mean: 'outcome'?",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "NameError",
+        "traceback_first_line": "NameError: name 'outcomes' is not defined. Did you mean: 'outcome'?",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "mf_01",
+      "bucket": "missing_field",
+      "expected_aether_error_classes": [
+        "UnknownField"
+      ],
+      "description": "Flow accesses a struct field that was not declared.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UnknownField",
+        "stderr_excerpt": "- Unknown field 'email' for struct 'Profile' at line 428"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "AttributeError",
+        "traceback_first_line": "AttributeError: 'Profile' object has no attribute 'email'",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "AttributeError",
+        "traceback_first_line": "AttributeError: 'Prediction' object has no attribute 'email'",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "mf_02",
+      "bucket": "missing_field",
+      "expected_aether_error_classes": [
+        "ArgumentCountMismatch"
+      ],
+      "description": "Caller passes too few args to a 2-arg LLM function.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "ArgumentCountMismatch",
+        "stderr_excerpt": "- Wrong number of arguments for 'answer': expected 2, found 1 at line 247"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: answer() missing 1 required positional argument: 'ctx'",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: answer() missing 1 required positional argument: 'ctx'",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "mf_03",
+      "bucket": "missing_field",
+      "expected_aether_error_classes": [
+        "UnknownField"
+      ],
+      "description": "Access nested struct field that does not exist on the inner type.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UnknownField",
+        "stderr_excerpt": "- Unknown field 'country' for struct 'Address' at line 354"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "AttributeError",
+        "traceback_first_line": "AttributeError: 'Address' object has no attribute 'country'",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": null,
+        "traceback_first_line": "For further information visit https://errors.pydantic.dev/2.13/u/schema-for-unknown-type",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "mf_04",
+      "bucket": "missing_field",
+      "expected_aether_error_classes": [
+        "UnknownField"
+      ],
+      "description": "Access misspelled field name on an existing struct.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "UnknownField",
+        "stderr_excerpt": "- Unknown field 'totl' for struct 'Order' at line 297"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "AttributeError",
+        "traceback_first_line": "AttributeError: 'Order' object has no attribute 'totl'. Did you mean: 'total'?",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "AttributeError",
+        "traceback_first_line": "AttributeError: 'Prediction' object has no attribute 'totl'",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "mf_05",
+      "bucket": "missing_field",
+      "expected_aether_error_classes": [
+        "ArgumentCountMismatch"
+      ],
+      "description": "Caller passes too many args to a 2-arg LLM function.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "ArgumentCountMismatch",
+        "stderr_excerpt": "- Wrong number of arguments for 'join': expected 2, found 3 at line 351"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: join() takes 2 positional arguments but 3 were given",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: join() takes 2 positional arguments but 3 were given",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "dd_01",
+      "bucket": "duplicate_definition",
+      "expected_aether_error_classes": [
+        "DuplicateDefinition"
+      ],
+      "description": "Two LLM functions share the same name.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "DuplicateDefinition",
+        "stderr_excerpt": "- Duplicate definition of 'classify' at line 180, column 0. First defined at line 74."
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='mock-output'"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output='B'"
+      }
+    },
+    {
+      "id": "dd_02",
+      "bucket": "duplicate_definition",
+      "expected_aether_error_classes": [
+        "DuplicateDefinition"
+      ],
+      "description": "Two structs share the same name.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "DuplicateDefinition",
+        "stderr_excerpt": "- Duplicate definition of 'Profile' at line 119, column 0. First defined at line 68."
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Profile(handle='alice', score=42) fields=['handle', 'score']"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Prediction("
+      }
+    },
+    {
+      "id": "dd_03",
+      "bucket": "duplicate_definition",
+      "expected_aether_error_classes": [
+        "DuplicateField"
+      ],
+      "description": "Struct declares the same field name twice.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "DuplicateField",
+        "stderr_excerpt": "- Duplicate field 'name' in struct 'Account' at line 128"
+      },
+      "langchain": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Account(id='acct-1', name='alice') fields=['id', 'name']"
+      },
+      "dspy": {
+        "result": "missed_silently",
+        "exit_code": 0,
+        "exception_class": null,
+        "traceback_first_line": null,
+        "stdout_excerpt": "output=Prediction("
+      }
+    },
+    {
+      "id": "dd_04",
+      "bucket": "duplicate_definition",
+      "expected_aether_error_classes": [
+        "DuplicateParameter"
+      ],
+      "description": "Function parameter declared twice.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "DuplicateParameter",
+        "stderr_excerpt": "- Duplicate parameter 'question' in function 'answer' at line 101"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "SyntaxError",
+        "traceback_first_line": "SyntaxError: duplicate argument 'question' in function definition",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "SyntaxError",
+        "traceback_first_line": "SyntaxError: duplicate argument 'question' in function definition",
+        "stdout_excerpt": ""
+      }
+    },
+    {
+      "id": "dd_05",
+      "bucket": "duplicate_definition",
+      "expected_aether_error_classes": [
+        "DuplicateVariant"
+      ],
+      "description": "Enum declares the same variant twice.",
+      "aether": {
+        "result": "caught_at_compile_time",
+        "exit_code": 1,
+        "error_class_matched": "DuplicateVariant",
+        "stderr_excerpt": "- Duplicate variant 'High' in enum 'Severity' at line 121"
+      },
+      "langchain": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: 'HIGH' already defined as 3",
+        "stdout_excerpt": ""
+      },
+      "dspy": {
+        "result": "caught_at_runtime",
+        "exit_code": 1,
+        "exception_class": "TypeError",
+        "traceback_first_line": "TypeError: 'HIGH' already defined as 3",
+        "stdout_excerpt": ""
+      }
+    }
+  ],
+  "summary": {
+    "aether_caught": 30,
+    "aether_missed": 0,
+    "lc_caught_at_runtime": 17,
+    "lc_missed_silently": 13,
+    "dspy_caught_at_runtime": 17,
+    "dspy_missed_silently": 13,
+    "by_bucket": {
+      "type_mismatch": {
+        "total": 10,
+        "aether_caught": 10,
+        "lc_caught_at_runtime": 0,
+        "dspy_caught_at_runtime": 0
+      },
+      "undefined_reference": {
+        "total": 10,
+        "aether_caught": 10,
+        "lc_caught_at_runtime": 10,
+        "dspy_caught_at_runtime": 10
+      },
+      "missing_field": {
+        "total": 5,
+        "aether_caught": 5,
+        "lc_caught_at_runtime": 5,
+        "dspy_caught_at_runtime": 5
+      },
+      "duplicate_definition": {
+        "total": 5,
+        "aether_caught": 5,
+        "lc_caught_at_runtime": 2,
+        "dspy_caught_at_runtime": 2
+      }
+    }
+  },
+  "methodology_notes": {
+    "cd_substitution": "The original ablation design included a circular_dependency category, but verification revealed that aetherc's source-level cd detector is currently preempted by semantic analysis on programs that contain other issues; the SemanticError::CircularDependency variant is defined but never emitted. Rather than fabricate test cases that would not trigger the intended error path, we substituted duplicate_definition tests, which exercise a different but more practically significant error class (silent shadowing in Python is more dangerous than a circular dependency, which typically manifests as RecursionError or ImportError -- loud and visible). The cd detection gap is tracked at https://github.com/sowadalmughni/aether-lang/issues/4 and is targeted for a follow-up compiler release.",
+    "aether_run": "aetherc check <file>; classified by stderr pattern. exit 0 = missed; exit !=0 with a known SemanticError pattern = caught_at_compile_time.",
+    "python_run": "python <file>; 30s timeout. exit 0 = missed_silently; exit !=0 with a Python traceback = caught_at_runtime (includes SyntaxError at file load and Enum class-body errors)."
+  }
+}

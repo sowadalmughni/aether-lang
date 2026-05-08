@@ -1,0 +1,18 @@
+// ur_04: UndefinedFunction — middle of a 3-step pipeline calls a missing fn.
+
+llm fn first(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "First: {{text}}"
+}
+
+llm fn third(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Third: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let a = first(input);
+    let b = missing_middle(a);
+    let c = third(b);
+    return c;
+}

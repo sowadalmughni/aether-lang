@@ -1,0 +1,16 @@
+// ur_09: UndefinedFunction — second flow calls a function that is never declared.
+
+llm fn first(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "First: {{text}}"
+}
+
+flow primary(input: string) -> string {
+    let a = first(input);
+    return a;
+}
+
+flow secondary(input: string) -> string {
+    let b = absent_helper(input);
+    return b;
+}

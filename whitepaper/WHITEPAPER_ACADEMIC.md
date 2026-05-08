@@ -721,15 +721,27 @@ The "Parallel + cache (warm)" row is sourced from `aether_mock_v1.json` `results
 
 ### 9.3 Caching Performance (H3)
 
-Cache hit rates on CustomerSupport-100 with repeated queries:
+Cache hit rate, p50 latency, and warm-vs-no-cache delta across three cache modes (`no_cache` clears the cache before every individual `/execute`; `l1_exact_match` clears once per trial; `repeat_warm` runs the dataset once as warmup, discards the warmup latencies, then measures a second pass over the populated cache). 5 trials per cell, mock LLM at 50 ms flat. Source: `ablation_cache_v1.json`. Cells are `mean ± std [95% CI]`.
 
-| Caching Level | Hit Rate | Tokens Saved | Cost Reduction |
-|---------------|----------|--------------|----------------|
-| No caching | 0% | 0 | $0.00 |
-| Exact-match cache | 60% | 18,240 | $0.91 |
-| Semantic cache (planned) | N/A | N/A | N/A |
+**`customer_support_100` — every query is unique** (`results[0]`, `results[1]`, `results[2]`, `results[3].cross_mode_deltas`):
 
-**Methodology**: Hit rate measured as (cache hits / total LLM calls). Tokens saved computed from cached response token counts. Cost reduction assumes GPT-4o pricing.
+| Mode | p50 (ms) | cache_hit_rate | Δ p50 vs no_cache (ms) |
+|---|---|---|---|
+| no_cache | 144.8 ± 0.4472135954999579 [144.2, 145.0] | 0.0000 (CI degenerate) | — |
+| l1_exact_match | 143.8 ± 1.5247950681976907 [142.6, 144.9] | 0.0000 (CI degenerate) | (cache empty within run) |
+| repeat_warm | 33.2 ± 0.8366600265340756 [32.4, 33.8] | 1.0000 (CI degenerate) | -111.6 [-112.6, -111.0] |
+
+**`customer_support_repeat_100` — 30 unique queries × repeats** (`results[4]`, `results[5]`, `results[6]`, `results[7].cross_mode_deltas`):
+
+| Mode | p50 (ms) | cache_hit_rate | Δ p50 vs no_cache (ms) |
+|---|---|---|---|
+| no_cache | 145.1 ± 0.223606797749979 [145.0, 145.4] | 0.0000 (CI degenerate) | — |
+| l1_exact_match | 36.1 ± 1.4317821063276353 [34.9, 37.2] | 0.7000 (CI degenerate) | (delta_l1_vs_no_cache p50 not present in JSON) |
+| repeat_warm | 33.8 ± 1.9235384061671346 [32.8, 36.0] | 1.0000 (CI degenerate) | -111.3 [-112.3, -108.8] |
+
+**Methodology.** Hit rate is read directly from the runtime's `cache_hit_rate` response field, not derived. `tokens_saved_total` is reported in every JSON cell as **0.0 across every config** because the mock LLM does not populate the `tokens_saved` field of the response; we did not measure mock-mode token savings or convert them to a dollar figure. The earlier paper's "60% hit rate", "18,240 tokens saved" and "$0.91 cost reduction" cells came from an extrapolation that no committed JSON in `bench/results/` supports — those cells are therefore dropped. Real-API token usage and cost are reported in Section 9.6.5 above (Aether $0.128887 across 3 trials × 2 datasets).
+
+**Discussion.** When every query is unique within a single run (`customer_support_100`), `l1_exact_match` cannot help (hit rate stays at 0.0); only the cross-run `repeat_warm` mode achieves a hit. When the workload contains repeats (`customer_support_repeat_100`, designed so 70 of 100 queries are repeats of earlier ones), `l1_exact_match` reaches **0.7000** within a single run — directly observable as the proportion of repeated queries. `repeat_warm` reaches 1.0 in both workloads because the warmup populates every cache key before the measured pass starts.
 
 ### 9.4 Code Complexity Comparison
 

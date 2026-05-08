@@ -681,31 +681,43 @@ Every aggregate cell in Section 9 follows the convention `mean ± std [95% CI]`,
 
 ## 9. Evaluation Results
 
-This section presents empirical results from executing the benchmark suite described in Section 8. All measurements use mock LLM providers with realistic latency simulation to ensure reproducibility. Results with real API providers are marked separately when available.
-
-> **Note**: Baseline results (LangChain, DSPy) measured using mock LLM providers with 100ms simulated latency on February 4, 2026. Aether runtime results are projected based on design specifications; runtime compilation requires MSVC toolchain not available in the test environment. See Section 9.8 (Threats to Validity) for discussion of this limitation.
+This section presents empirical results from executing the benchmark suite described in Section 8. Mock-mode measurements use a fixed-latency mock LLM provider (50 ms flat per call) to isolate runtime/orchestration jitter from model variance; real-API measurements against `gpt-4o-mini` are reported in Section 9.6.5 and the new HotpotQA / security subsections (9.8, 9.9). Every numeric cell below is anchored to a JSON file in `bench/results/`; the field path is given alongside each table.
 
 ### 9.1 Summary of Results
 
-| Hypothesis | Target | Measured Result | Status |
+| Hypothesis | Target | Measured Result | Source |
 |------------|--------|-----------------|--------|
-| H1 (Type Safety) | >80% reduction in runtime type errors | 100% (projected) | Pending Runtime |
-| H2 (Latency) | >30% reduction via parallelization | 63% (projected) | Pending Runtime |
-| H3 (Cost Efficiency) | >40% improvement in cache hit rate | 60% (projected) | Pending Runtime |
+| H1 (Type Safety) | >80% reduction in runtime type errors | 30/30 (100.00%) caught at compile time; LangChain 17/30 at runtime + 13 missed silently; DSPy 17/30 at runtime + 13 missed silently | `ablation_typesafety_v1.json` `summary.aether_caught` / `summary.lc_*` / `summary.dspy_*` |
+| H2 (Latency, customer_support_100) | >30% reduction via parallelization | speedup = 1.4778× [1.4728, 1.4849] (paired BCa) | `ablation_parallel_v1.json` `results[2].speedup.speedup_p50` |
+| H2 (Latency, document_analysis_50) | >30% reduction via parallelization | speedup = 2.5841× [2.5635, 2.5986] (paired BCa) | `ablation_parallel_v1.json` `results[5].speedup.speedup_p50` |
+| H3 (Cost Efficiency, repeat workload) | >40% improvement in cache hit rate | 0.7000 (l1_exact_match) and 1.0000 (repeat_warm) on `customer_support_repeat_100`, both CIs degenerate (constant per-trial) | `ablation_cache_v1.json` `results[5].cache_hit_rate.mean`, `results[6].cache_hit_rate.mean` |
+| H4 (Security, taint tracking) | (new — see Section 9.9) | compile_time_catch_rate = 1.0000 on `aether_taint_on`, 0.0000 on `aether_taint_off` and `langchain_baseline`; ASR is 0.0 across all configs (model-side rejection on `gpt-4o-mini`) | `security_v1.json` `configs[*].metrics` |
 
 ### 9.2 Latency Analysis (H2)
 
-Measurements on CustomerSupport-100 benchmark with mock provider (100ms simulated latency per LLM call):
+The parallelization ablation runs `customer_support_100` and `document_analysis_50` against the runtime in two modes — `sequential` (POSTed with `?sequential=true`) and `parallel` (default) — clearing the cache before every trial in both modes so the parallelization signal is not confounded with caching. Speedup is the paired-trial BCa bootstrap of `sequential.p50 / parallel.p50`. Cells are `mean ± std [95% CI]`.
 
-| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | Speedup vs Sequential |
-|---------------|----------|----------|----------|----------------------|
-| Sequential execution | 274 | 298 | 312 | 1.0x |
-| Parallel execution (default) | 103 | 118 | 125 | 2.7x |
-| Parallel + caching (warm) | 58 | 72 | 84 | 4.7x |
+**customer_support_100** (`ablation_parallel_v1.json` `results[0]`, `results[1]`, `results[2]`):
 
-**Methodology**: Each configuration runs the full 100-query dataset. Sequential mode uses `?sequential=true`. Warm cache results follow an initial cold run.
+| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | parallelization_factor | speedup_p50 |
+|---|---|---|---|---|---|
+| Sequential | 206.0 ± 0.7071067811865476 [205.4, 206.6] | 213.86999999999998 ± 1.8949274392440436 [212.08999999999997, 215.06] | 246.70200000000028 ± 30.78112847184162 [224.9640000000001, 273.04000000000065] | 1.0 ± 0.0 [1.0, 1.0] | 1.0 (baseline) |
+| Parallel | 139.4 ± 0.5477225575051661 [139.0, 139.8] | 148.01 ± 1.8776314867406771 [146.6, 149.41] | 155.34400000000008 ± 6.076251311458442 [151.12800000000004, 161.17200000000008] | 1.474893953709039 ± 0.0012671971603374272 [1.4739729210088837, 1.4760621472474238] | 1.4777800616649537 [1.4727852004110997, 1.4848920863309352] |
+| Parallel + cache (warm) | 33.0 ± 0.7071067811865476 [32.4, 33.6] | 39.019999999999996 ± 1.2352125323198428 [37.60287327768938, 39.65] | 40.648000000000025 ± 1.5991622806957824 [39.61200000000001, 42.332000000000065] | 1.3724 (raw_trial_results mean) | derived from above |
 
-**Discussion**: The parallelization benefit depends on workflow structure. Workflows with independent branches show greater speedup than linear pipelines. Cache warming further reduces latency for repeated queries.
+The "Parallel + cache (warm)" row is sourced from `aether_mock_v1.json` `results[2]` (`customer_support_100`, `parallel_cached`, 5 trials). Cache hit rate for that row is `1.0000` (CI degenerate), `cache_hits=300, cache_misses=0` per trial.
+
+**document_analysis_50** (`ablation_parallel_v1.json` `results[3]`, `results[4]`, `results[5]`; `aether_mock_v1.json` `results[5]`):
+
+| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | parallelization_factor | speedup_p50 |
+|---|---|---|---|---|---|
+| Sequential | 218.6 ± 0.5477225575051661 [218.2, 219.0] | 224.66 ± 1.5709869509324355 [223.42, 225.76] | 232.81799999999998 ± 6.359863992256416 [228.12600000000003, 237.61599999999993] | 1.0 ± 0.0 [1.0, 1.0] | 1.0 (baseline) |
+| Parallel | 84.6 ± 0.6519202405202649 [84.1, 85.2] | 90.95000000000002 ± 3.5533434959204273 [88.86, 94.75] | 100.11599999999996 ± 8.827212470536756 [93.726, 107.58399999999997] | 2.5574880420297235 ± 0.007442829393822968 [2.5516312803829253, 2.5631235114588073] | 2.5840550238573576 [2.5634618743168396, 2.5985911524373067] |
+| Parallel + cache (warm) | 31.5 ± 0.7071067811865476 [31.0, 32.1] | 38.71 ± 0.44215381938868314 [38.2, 39.0] | 39.91799999999999 ± 1.045188978127875 [39.17542123854476, 40.733999999999995] | 1.8724 (raw_trial_results mean) | derived from above |
+
+**Methodology.** 5 trials per cell. Mock LLM at 50 ms flat. `parallelization_factor` is the runtime response field of the same name (`sum(node_execution_times_ms) / total_execution_time_ms`), read directly from each trial response. Speedup CIs are paired-trial BCa bootstrap (n_resamples=10000, seed=42); the definition string is recorded in `ablation_parallel_v1.json` `results[2].speedup.definition` and `results[5].speedup.definition`.
+
+**Discussion.** Speedup tracks workflow shape: the document-analysis DAG has a wider parallel level (≈3 concurrent LLM calls per item, parallelization_factor ≈ 2.56) and yields a 2.58× p50 speedup; the customer-support DAG has a narrower one (≈1.5 concurrent calls, parallelization_factor ≈ 1.47) and yields a 1.48× p50 speedup. The earlier paper's "2.7× speedup" extrapolation assumed perfectly parallel workloads; the measured value depends on the DAG.
 
 ### 9.3 Caching Performance (H3)
 
@@ -874,14 +886,21 @@ The following errors are caught at compile time in this workflow:
 3. **Missing required field**: If `TriageResult` return missing `escalate` field, compiler error
 4. **Enum variant mismatch**: If `urgency == Urgency.Urgent` (invalid variant), compiler error listing valid variants
 
-#### 9.6.5 Performance Results
+#### 9.6.5 Performance Results (real OpenAI API)
 
-| Metric | Sequential | Parallel | Parallel + Cache |
-|--------|-----------|----------|------------------|
-| End-to-end latency (p50) | 274 ms | 103 ms | 58 ms |
-| Total LLM calls | 3 | 3 | 1.2 |
-| Cache hits (warm) | N/A | N/A | 1.8 |
-| Estimated cost per query | $0.0045 | $0.0045 | $0.0018 |
+The case study was executed end-to-end against the real `gpt-4o-mini` API on 2026-05-08 (3 trials, 100 items, all three configurations); the orchestration script was [`scripts/run_real_api_benchmark.sh`](../scripts/run_real_api_benchmark.sh) and the merged result is [`bench/results/real_api_v1.json`](../bench/results/real_api_v1.json), with a Markdown summary at [`bench/results/REAL_API.md`](../bench/results/REAL_API.md). Cells are `mean ± std [95% CI]` across the 3 trials.
+
+| Metric | Sequential | Parallel | Parallel + Cache (warm) |
+|---|---|---|---|
+| Aether p50 (ms) | 6821.0 ± 636.3196916644965 [6121.5, 7235.666666666668] | 5395.166666666667 ± 69.21404000152955 [5354.166666666667, 5475.0] | 37.333333333333336 ± 2.0816659994661326 [35.0, 38.666666666666664] |
+| Aether p95 (ms) | 11609.816666666666 ± 2528.1532990175524 [8859.449999999999, 13267.483333333332] | 8148.399999999999 ± 648.0424773886352 [7427.3499999999985, 8566.683333333332] | 41.0 ± 0.0 [41.0, 41.0] |
+| Aether cache_hit_rate | 0.0 (per-trial constant) | 0.0 (per-trial constant) | 1.0 (per-trial constant; 300 hits / 0 misses per trial) |
+
+Source: `aether_real_api_v1.json` `results[0]` (sequential), `results[1]` (parallel), `results[2]` (parallel_cached) for `customer_support_100`.
+
+**Cost.** Per `real_api_v1.json` `per_system.aether.cost_usd` and the cross-checked merge log: Aether spent **$0.128887** for the full 3-trial run on both datasets (input 216,510 tokens at $0.15/1M, output 160,685 tokens at $0.60/1M). LangChain spent **$0.126498** and DSPy **$0.222963** for the same workload; total combined run cost **$0.478349** against a $10.00 budget gate (`actual_under_budget=True`). DSPy's higher cost is driven by its prompt-formatting overhead (signature serialization), documented in `REAL_API.md`.
+
+**Discussion.** Real-API parallel-cached is two orders of magnitude faster than sequential on this workflow (p50 6821 ms → 37.3 ms, ratio ≈ 183×) because the cached path skips both the OpenAI round-trip and the inter-stage scheduling overhead; the only remaining cost is one HTTP loopback per item from the bench client to the runtime. Real-API parallel (without cache) is slower than the LangChain baseline parallel (5395 ms vs 4754 ms on the same workload, per `REAL_API.md`); this is the deployment-shape cost of the Aether runtime sitting behind an HTTP boundary, not a runtime defect. We document it explicitly in 9.6.5 rather than hiding it.
 
 ### 9.7 Threats to Validity
 

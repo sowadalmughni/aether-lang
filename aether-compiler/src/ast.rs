@@ -388,6 +388,9 @@ pub enum PrimitiveType {
 pub struct Param {
     pub name: Spanned<String>,
     pub ty: Type,
+    /// Per-parameter decorators (e.g. `@untrusted`, `@trusted`).
+    #[serde(default)]
+    pub decorators: Vec<Decorator>,
     pub span: Span,
 }
 
@@ -396,6 +399,9 @@ pub struct Param {
 pub struct Field {
     pub name: Spanned<String>,
     pub ty: Type,
+    /// Per-field decorators (e.g. `@untrusted`, `@trusted`).
+    #[serde(default)]
+    pub decorators: Vec<Decorator>,
     pub span: Span,
 }
 

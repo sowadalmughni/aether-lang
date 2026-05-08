@@ -1,0 +1,74 @@
+HotpotQA Evaluation Script — Attribution and Licensing
+========================================================
+
+This directory contains a vendored / faithfully-reimplemented copy of the
+HotpotQA reference answer-evaluation logic for use inside the Aether
+benchmark suite.
+
+Source
+------
+
+Upstream file:
+    https://github.com/hotpotqa/hotpot/blob/master/hotpot_evaluate_v1.py
+
+Upstream repository:
+    https://github.com/hotpotqa/hotpot
+
+Paper:
+    Yang et al., "HotpotQA: A Dataset for Diverse, Explainable Multi-hop
+    Question Answering", EMNLP 2018. https://arxiv.org/abs/1809.09600
+
+Vendored on:
+    2026-05-08
+
+What was vendored
+-----------------
+
+Only the answer-evaluation primitives required by the bench harness:
+
+  * normalize_answer(s)         — SQuAD/HotpotQA-style string normalisation
+  * f1_score(pred, gold)        — token-level F1 with yes/no/noanswer guard
+  * exact_match_score(pred, gold) — boolean EM after normalisation
+  * update_answer(metrics, ...) — accumulator helper
+  * evaluate_predictions(preds, golds) — convenience aggregator
+
+Supporting-facts (sentence-level) and joint metrics from the upstream
+script are intentionally NOT vendored — the bench harness does not yet
+score sentence-level supporting facts.
+
+Licensing
+---------
+
+The HotpotQA upstream code repository (https://github.com/hotpotqa/hotpot)
+does NOT carry a top-level LICENSE file at the time of vendoring.
+
+The HotpotQA dataset itself is distributed under
+    Creative Commons Attribution-ShareAlike 4.0 International
+    (CC BY-SA 4.0)
+per the project page: https://hotpotqa.github.io/
+
+This vendored implementation reproduces the standard SQuAD-style
+normalisation pipeline (lower / strip-punct / drop-articles /
+collapse-whitespace) followed by token F1 / EM. That algorithm is
+well-documented in both the HotpotQA paper (above) and the SQuAD paper
+(Rajpurkar et al., EMNLP 2016, https://arxiv.org/abs/1606.05250) and is
+broadly considered the reference HotpotQA metric.
+
+If the upstream HotpotQA project later publishes a LICENSE that imposes
+additional terms on the evaluation script, this vendored copy should be
+updated to comply or replaced with a re-fetched canonical copy.
+
+Citation
+--------
+
+If you publish results computed with this evaluator, please cite:
+
+    @inproceedings{yang2018hotpotqa,
+      title     = {{HotpotQA}: A Dataset for Diverse, Explainable
+                   Multi-hop Question Answering},
+      author    = {Yang, Zhilin and Qi, Peng and Zhang, Saizheng and
+                   Bengio, Yoshua and Cohen, William W. and
+                   Salakhutdinov, Ruslan and Manning, Christopher D.},
+      booktitle = {EMNLP},
+      year      = {2018},
+    }

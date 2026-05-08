@@ -1,0 +1,102 @@
+// HotpotQA-style multi-hop retrieval-augmented QA flow
+//
+// Demonstrates:
+// - Three-step RAG pipeline: subquery decomposition -> retrieval -> answer.
+// - Mock retriever (compute step) returning the provided context paragraphs;
+//   swap to a real retriever (BM25 / dense) by replacing retrieve_context's
+//   compute body with an HTTP call. The flow shape stays the same.
+// - Data dependencies: extract_subqueries -> retrieve_context -> answer_question.
+//   The runtime executes them in topological order; nothing here is parallelisable
+//   because each step strictly depends on the previous one.
+//
+// Mirrors the schema produced by bench/datasets/hotpotqa_dev_500.jsonl
+// (id, query, expected_answer, context_paragraphs[]). The bench harness
+// passes `query` and `context_paragraphs_serialised` (a single string, all
+// 10 paragraphs joined with [TITLE] markers); the answer node reads the
+// retrieved context and produces the final short answer.
+
+struct RAGAnswer {
+    subqueries: list<string>,
+    retrieved_context: string,
+    answer: string
+}
+
+// Step 1: Decompose the multi-hop question into single-hop subqueries.
+// HotpotQA questions are either "comparison" or "bridge" type; both benefit
+// from explicit decomposition before retrieval.
+llm fn extract_subqueries(question: string) -> list<string> {
+    model: "gpt-4o-mini",
+    temperature: 0.0,
+    max_tokens: 200,
+    prompt: "You will be asked a multi-hop question. Decompose it into 2-3 single-hop subqueries that, answered together, would answer the original question. Return as a JSON array of strings.
+
+Question: {{question}}
+
+Subqueries:"
+}
+
+// Step 2: Mock retriever -- in this benchmark, the dataset already provides
+// the 10 distractor paragraphs per item. The mock retriever simply forwards
+// them through. Swap this `compute` for an `llm fn` or external retriever
+// call to plug in a real BM25 / dense retriever.
+compute fn retrieve_context(subqueries: list<string>, paragraphs: string) -> string {
+    // The bench harness pre-serialises the 10 HotpotQA distractor paragraphs
+    // into a single string of the form "[TITLE: <t>]\n<sent1> <sent2> ...\n\n[TITLE: ...]"
+    // so the mock retriever has nothing to do. The subqueries are kept as a
+    // dependency so the DAG edge subqueries -> retrieve -> answer is
+    // expressed correctly even when retrieval is a no-op.
+    return paragraphs;
+}
+
+// Step 3: Answer the multi-hop question given the retrieved context.
+// HotpotQA gold answers are short (yes/no or 1-3 word spans), so we instruct
+// the model to keep the answer concise.
+llm fn answer_question(question: string, context: string, subqueries: list<string>) -> string {
+    model: "gpt-4o-mini",
+    temperature: 0.0,
+    max_tokens: 80,
+    prompt: "Answer the multi-hop question using only the provided context. Give the shortest possible answer (yes/no or a short noun phrase). Do not explain your reasoning.
+
+Context:
+{{context}}
+
+Subqueries you should resolve:
+{{subqueries}}
+
+Question: {{question}}
+
+Answer:"
+}
+
+// Main flow: chain the three steps with explicit dependencies.
+flow rag_qa(question: string, paragraphs: string) -> RAGAnswer {
+    // Step 1: decompose
+    let subs = extract_subqueries(question);
+
+    // Step 2: retrieve (depends on subs)
+    let ctx = retrieve_context(subs, paragraphs);
+
+    // Step 3: answer (depends on ctx and subs)
+    let final_answer = answer_question(question, ctx, subs);
+
+    return RAGAnswer {
+        subqueries: subs,
+        retrieved_context: ctx,
+        answer: final_answer
+    };
+}
+
+// A minimal smoke test demonstrating the flow shape; full benchmark runs
+// happen via bench/baselines/run_hotpotqa.py.
+test "rag_qa_smoke" {
+    let q = "Were Scott Derrickson and Ed Wood of the same nationality?";
+    let p = "[TITLE: Scott Derrickson]
+Scott Derrickson is an American filmmaker.
+
+[TITLE: Ed Wood (film)]
+Ed Wood is an American filmmaker, actor, and author.";
+
+    let result = rag_qa(q, p);
+    assert result.subqueries.length > 0;
+    assert result.answer != "";
+}

@@ -217,14 +217,23 @@ def _run_single_trial(
     successful = 0
     failed = 0
 
+    tokens_input = 0
+    tokens_output = 0
+
     start_time = time.perf_counter()
     for item in dataset_items:
         try:
             dag = _build_dag(scenario, item)
             result = execute_dag(runtime_url, dag, sequential=sequential)
             latencies.append(result.get("total_execution_time_ms", result.get("client_latency_ms", 0)))
-            tokens_total += result.get("total_tokens", 0) or 0
-            tokens_saved += result.get("tokens_saved", 0) or 0
+            # Runtime returns total_token_cost (sum across nodes), not total_tokens. Per-node
+            # input_tokens / output_tokens are exposed in results[]; sum them so we can compute
+            # real OpenAI cost in --provider openai mode (different rates for in vs out).
+            tokens_total += int(result.get("total_token_cost", result.get("total_tokens", 0)) or 0)
+            tokens_saved += int(result.get("tokens_saved", 0) or 0)
+            for nr in (result.get("results") or []):
+                tokens_input += int(nr.get("input_tokens", 0) or 0)
+                tokens_output += int(nr.get("output_tokens", 0) or 0)
             pf = result.get("parallelization_factor")
             if pf is not None:
                 parallelization_factors.append(float(pf))
@@ -269,6 +278,8 @@ def _run_single_trial(
     return {
         "latencies_ms": latencies,
         "tokens_total": tokens_total,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
         "tokens_saved": tokens_saved,
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
@@ -483,16 +494,26 @@ def run_config_trials(
     n_trials: int,
     dataset_items: list[dict],
     scenario: str,
-) -> list[dict]:
-    """Run N trials for one (dataset, config) tuple and return per-trial dicts."""
+) -> tuple[list[dict], int, int]:
+    """Run N trials for one (dataset, config) tuple and return
+    (per-trial dicts, warmup_tokens_input, warmup_tokens_output).
+
+    For parallel_cached, the warmup pass is a real API hit (cache freshly
+    cleared); its tokens are real cost and surfaced separately so the
+    real-API merge step can include them in actual_cost_usd.
+    """
     assert config in SUITE_CONFIGS, f"unknown config: {config}"
     sequential = (config == "sequential")
     trials: list[dict] = []
+    warmup_tokens_input = 0
+    warmup_tokens_output = 0
 
     if config == "parallel_cached":
         # Warm the cache once; later measured trials must NOT clear it.
         clear_cache(runtime_url)
         warmup = _run_single_trial(runtime_url, scenario, dataset_items, sequential=False)
+        warmup_tokens_input = int(warmup.get("tokens_input", 0))
+        warmup_tokens_output = int(warmup.get("tokens_output", 0))
         if warmup["cache_hit_rate"] > 0.05:
             raise RuntimeError(
                 f"parallel_cached warmup expected ~0% hit rate (cache freshly cleared) "
@@ -519,7 +540,7 @@ def run_config_trials(
             p50, p95, p99 = _trial_percentiles(trial["latencies_ms"])
             trial["p50"], trial["p95"], trial["p99"] = p50, p95, p99
             trials.append(trial)
-    return trials
+    return trials, warmup_tokens_input, warmup_tokens_output
 
 
 def _bootstrap_ci(per_trial_values: list[float]) -> dict:
@@ -584,6 +605,8 @@ def _trial_for_json(t: dict) -> dict:
         "cache_hits": t["cache_hits"],
         "cache_misses": t["cache_misses"],
         "tokens_total": t["tokens_total"],
+        "tokens_input": t.get("tokens_input", 0),
+        "tokens_output": t.get("tokens_output", 0),
         "tokens_saved": t["tokens_saved"],
         "errors": t["errors"],
         "parallelization_factor_mean": round(t["parallelization_factor_mean"], 4),
@@ -622,7 +645,7 @@ def run_suite(args) -> int:
 
         for config in selected_configs:
             print(f"\n[{dataset_name} / {config}] running {args.trials} trials over {len(dataset_items)} items")
-            trials = run_config_trials(
+            trials, warmup_in, warmup_out = run_config_trials(
                 args.runtime_url, dataset_name, config, args.trials, dataset_items, scenario
             )
             agg = aggregate_trials(trials)
@@ -631,6 +654,8 @@ def run_suite(args) -> int:
                 "config": config,
                 "trials": args.trials,
                 **agg,
+                "warmup_tokens_input": warmup_in,
+                "warmup_tokens_output": warmup_out,
                 "raw_trial_results": [_trial_for_json(t) for t in trials],
             }
             results.append(entry)

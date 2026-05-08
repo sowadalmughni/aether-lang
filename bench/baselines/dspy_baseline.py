@@ -416,6 +416,32 @@ def _item_kwargs(scenario: str, item: dict) -> dict:
     raise ValueError(f"unknown scenario: {scenario}")
 
 
+def _lm_history_len() -> int:
+    """Snapshot of dspy.settings.lm.history length so we can slice usage per trial."""
+    lm = getattr(dspy.settings, "lm", None)
+    hist = getattr(lm, "history", None) if lm else None
+    return len(hist) if hist is not None else 0
+
+
+def _sum_lm_usage(start_idx: int) -> tuple[int, int]:
+    """Sum prompt/completion tokens from dspy.settings.lm.history[start_idx:].
+
+    DSPy 2.6 stores per-call dicts with a 'usage' field on the LM history.
+    For real OpenAI calls this is populated from the API response. For the
+    mock LM in this file we don't consult history (mock returns 0 here).
+    """
+    lm = getattr(dspy.settings, "lm", None)
+    hist = getattr(lm, "history", None) if lm else None
+    if not hist:
+        return 0, 0
+    inp = out = 0
+    for entry in hist[start_idx:]:
+        u = (entry or {}).get("usage") or {}
+        inp += int(u.get("prompt_tokens", u.get("input_tokens", 0)) or 0)
+        out += int(u.get("completion_tokens", u.get("output_tokens", 0)) or 0)
+    return inp, out
+
+
 def run_one_trial(
     scenario: str,
     items: list[dict],
@@ -427,6 +453,7 @@ def run_one_trial(
     cache_misses_start = cache.misses if cache else 0
 
     module = _build_module(scenario, parallel=parallel, cache=cache)
+    history_start = _lm_history_len()
 
     latencies_ms: list[float] = []
     parallelization_factors: list[float] = []
@@ -469,9 +496,14 @@ def run_one_trial(
         else (1.0 if not parallel else 0.0)
     )
 
+    tokens_input, tokens_output = _sum_lm_usage(history_start)
+    tokens_total = tokens_input + tokens_output
+
     return {
         "latencies_ms": latencies_ms,
-        "tokens_total": 0,
+        "tokens_total": tokens_total,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
         "tokens_saved": 0,
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
@@ -511,15 +543,25 @@ def run_config_trials(
     items: list[dict],
     config: str,
     n_trials: int,
-) -> list[dict]:
+) -> tuple[list[dict], int, int]:
+    """Returns (trials, warmup_tokens_input, warmup_tokens_output).
+
+    Mirrors langchain_baseline.run_config_trials. The parallel_cached warmup
+    pass is a real API hit; its tokens are real cost and surfaced separately
+    so the merge step can include them in actual_cost_usd.
+    """
     assert config in SUITE_CONFIGS, f"unknown config: {config}"
     parallel = (config != "sequential")
     trials: list[dict] = []
+    warmup_tokens_input = 0
+    warmup_tokens_output = 0
 
     if config == "parallel_cached":
         cache = ExplicitCache()
-        # Warmup pass (discarded). Cache freshly empty -> ~0% hit rate.
+        # Warmup pass (discarded for latency, but its tokens are real cost).
         warmup = run_one_trial(scenario, items, parallel=True, cache=cache)
+        warmup_tokens_input = int(warmup.get("tokens_input", 0))
+        warmup_tokens_output = int(warmup.get("tokens_output", 0))
         if warmup["cache_hit_rate"] > 0.05:
             raise RuntimeError(
                 f"parallel_cached warmup expected ~0% hit rate but saw "
@@ -545,7 +587,7 @@ def run_config_trials(
             p50, p95, p99 = _trial_percentiles(trial["latencies_ms"])
             trial["p50"], trial["p95"], trial["p99"] = p50, p95, p99
             trials.append(trial)
-    return trials
+    return trials, warmup_tokens_input, warmup_tokens_output
 
 
 def _trial_for_json(t: dict) -> dict:
@@ -560,6 +602,8 @@ def _trial_for_json(t: dict) -> dict:
         "cache_hits": t["cache_hits"],
         "cache_misses": t["cache_misses"],
         "tokens_total": t["tokens_total"],
+        "tokens_input": t.get("tokens_input", 0),
+        "tokens_output": t.get("tokens_output", 0),
         "tokens_saved": t["tokens_saved"],
         "errors": t["errors"],
         "parallelization_factor_mean": round(t["parallelization_factor_mean"], 4),
@@ -755,13 +799,17 @@ def main() -> int:
     for dataset_name, scenario, items in scenario_items:
         for config in selected_configs:
             print(f"  {dataset_name} / {config} ({args.trials} trials)...", flush=True)
-            trials = run_config_trials(scenario, items, config, args.trials)
+            trials, warmup_in, warmup_out = run_config_trials(
+                scenario, items, config, args.trials
+            )
             agg = aggregate_trials(trials)
             entry = {
                 "dataset": dataset_name,
                 "config": config,
                 "trials": args.trials,
                 **agg,
+                "warmup_tokens_input": warmup_in,
+                "warmup_tokens_output": warmup_out,
                 "raw_trial_results": [_trial_for_json(t) for t in trials],
             }
             results.append(entry)

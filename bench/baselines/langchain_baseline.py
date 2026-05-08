@@ -39,6 +39,7 @@ from typing import Any, Optional
 
 # --- Real LangChain imports (proof per acceptance criterion 3) ---------------
 from langchain_core.caches import InMemoryCache
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.globals import set_llm_cache
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -90,6 +91,49 @@ def _drain_call_durations_ms() -> list[float]:
         out = list(_CALL_DURATIONS_MS)
         _CALL_DURATIONS_MS.clear()
         return out
+
+
+# Per-trial token usage recorder. Captures real prompt/completion token counts
+# from ChatOpenAI response metadata so we can compute the actual USD cost from
+# response usage (gpt-4o-mini: $0.15/1M input, $0.60/1M output).
+#
+# Attach this directly to the ChatOpenAI instance (NOT via chain.invoke config),
+# because cached_step calls inner.invoke(payload) without propagating the outer
+# chain's callbacks — config-attached trackers would miss warmup API calls in
+# the parallel_cached config. LLM-attached callbacks fire for every model call
+# regardless of how the chain wraps it. We snapshot/diff per trial to recover
+# per-trial counts.
+class UsageTracker(BaseCallbackHandler):
+    def __init__(self) -> None:
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self._lock = threading.Lock()
+
+    def on_llm_end(self, response, **kwargs) -> None:  # type: ignore[override]
+        # ChatOpenAI surfaces usage in two places depending on version:
+        #   1. response.llm_output["token_usage"]
+        #   2. each generation.message.usage_metadata (langchain >= 0.3)
+        # Try both to stay robust across pinned langchain versions.
+        usage = None
+        if response.llm_output and isinstance(response.llm_output, dict):
+            usage = response.llm_output.get("token_usage") or response.llm_output.get("usage")
+        if usage:
+            with self._lock:
+                self.input_tokens += int(usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0)
+                self.output_tokens += int(usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0)
+            return
+        for gen_list in getattr(response, "generations", []) or []:
+            for gen in gen_list:
+                msg = getattr(gen, "message", None)
+                meta = getattr(msg, "usage_metadata", None) if msg else None
+                if meta:
+                    with self._lock:
+                        self.input_tokens += int(meta.get("input_tokens", 0) or 0)
+                        self.output_tokens += int(meta.get("output_tokens", 0) or 0)
+
+    def snapshot(self) -> tuple[int, int]:
+        with self._lock:
+            return self.input_tokens, self.output_tokens
 
 
 class DeterministicMockChat(BaseChatModel):
@@ -356,6 +400,29 @@ def _item_inputs(scenario: str, item: dict) -> dict:
     raise ValueError(f"unknown scenario: {scenario}")
 
 
+def _llm_usage_tracker(llm) -> UsageTracker:
+    """Return the single UsageTracker attached to llm.callbacks, creating one
+    if it isn't already attached. Attaching to the LLM (vs passing via
+    chain.invoke config) ensures cached_step's inner.invoke() — which doesn't
+    propagate config — still records usage during the parallel_cached warmup.
+    """
+    cbs = getattr(llm, "callbacks", None)
+    if cbs:
+        for cb in cbs:
+            if isinstance(cb, UsageTracker):
+                return cb
+    tracker = UsageTracker()
+    new_cbs = list(cbs or []) + [tracker]
+    try:
+        llm.callbacks = new_cbs
+    except (AttributeError, TypeError):
+        # ChatOpenAI is pydantic — assignment usually works, but DeterministicMockChat
+        # subclasses BaseChatModel which is also pydantic. If assignment fails, fall
+        # back to setattr through __dict__ (only used in mock-mode self-check anyway).
+        object.__setattr__(llm, "callbacks", new_cbs)
+    return tracker
+
+
 def run_one_trial(
     scenario: str,
     items: list[dict],
@@ -372,6 +439,8 @@ def run_one_trial(
     cache_misses_start = cache.misses if cache else 0
 
     chain = _build_chain(scenario, llm, parallel=parallel, cache=cache)
+    tracker = _llm_usage_tracker(llm)
+    in_start, out_start = tracker.snapshot()
 
     latencies_ms: list[float] = []
     parallelization_factors: list[float] = []
@@ -396,11 +465,6 @@ def run_one_trial(
         if item_wall_ms > 0:
             pf = sum(per_call) / item_wall_ms if per_call else 0.0
             parallelization_factors.append(pf)
-        # Token accounting: per-call mock returns input + output token counts
-        # in llm_output (above). We don't have direct access here without a
-        # custom callback; approximate as len(prompt)//4 sums times call count.
-        # For mock mode this is exactly the runtime's count.
-        # (We skip this for now -- benchmark cares about latency, not tokens.)
 
     total_time_ms = (time.perf_counter() - start) * 1000.0
 
@@ -421,9 +485,16 @@ def run_one_trial(
         else (1.0 if not parallel else 0.0)
     )
 
+    in_end, out_end = tracker.snapshot()
+    tokens_input = in_end - in_start
+    tokens_output = out_end - out_start
+    tokens_total = tokens_input + tokens_output
+
     return {
         "latencies_ms": latencies_ms,
         "tokens_total": tokens_total,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
         "tokens_saved": tokens_saved,
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
@@ -464,15 +535,27 @@ def run_config_trials(
     llm,
     config: str,
     n_trials: int,
-) -> list[dict]:
+) -> tuple[list[dict], int, int]:
+    """Returns (trials, warmup_tokens_input, warmup_tokens_output).
+
+    For parallel_cached, the warmup pass IS a real API hit (cache is empty),
+    so its tokens are real cost even though the warmup is otherwise discarded
+    from per-trial latency aggregates. We surface the warmup token counts so
+    the merge step can include them in actual_cost_usd. For sequential and
+    parallel, no warmup happens and the returned warmup tokens are 0.
+    """
     assert config in SUITE_CONFIGS, f"unknown config: {config}"
     parallel = (config != "sequential")
     trials: list[dict] = []
+    warmup_tokens_input = 0
+    warmup_tokens_output = 0
 
     if config == "parallel_cached":
         cache = ExplicitCache()
-        # Warmup pass (discarded). Cache freshly empty -> ~0% hit rate.
+        # Warmup pass (discarded for latency, but its tokens are real cost).
         warmup = run_one_trial(scenario, items, llm, parallel=True, cache=cache)
+        warmup_tokens_input = int(warmup.get("tokens_input", 0))
+        warmup_tokens_output = int(warmup.get("tokens_output", 0))
         if warmup["cache_hit_rate"] > 0.05:
             raise RuntimeError(
                 f"parallel_cached warmup expected ~0% hit rate but saw "
@@ -498,7 +581,7 @@ def run_config_trials(
             p50, p95, p99 = _trial_percentiles(trial["latencies_ms"])
             trial["p50"], trial["p95"], trial["p99"] = p50, p95, p99
             trials.append(trial)
-    return trials
+    return trials, warmup_tokens_input, warmup_tokens_output
 
 
 def _trial_for_json(t: dict) -> dict:
@@ -513,6 +596,8 @@ def _trial_for_json(t: dict) -> dict:
         "cache_hits": t["cache_hits"],
         "cache_misses": t["cache_misses"],
         "tokens_total": t["tokens_total"],
+        "tokens_input": t.get("tokens_input", 0),
+        "tokens_output": t.get("tokens_output", 0),
         "tokens_saved": t["tokens_saved"],
         "errors": t["errors"],
         "parallelization_factor_mean": round(t["parallelization_factor_mean"], 4),
@@ -726,13 +811,17 @@ def main() -> int:
     for dataset_name, scenario, items in scenario_items:
         for config in selected_configs:
             print(f"  {dataset_name} / {config} ({args.trials} trials)...", flush=True)
-            trials = run_config_trials(scenario, items, llm, config, args.trials)
+            trials, warmup_in, warmup_out = run_config_trials(
+                scenario, items, llm, config, args.trials
+            )
             agg = aggregate_trials(trials)
             entry = {
                 "dataset": dataset_name,
                 "config": config,
                 "trials": args.trials,
                 **agg,
+                "warmup_tokens_input": warmup_in,
+                "warmup_tokens_output": warmup_out,
                 "raw_trial_results": [_trial_for_json(t) for t in trials],
             }
             results.append(entry)

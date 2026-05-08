@@ -954,7 +954,7 @@ The `aether_taint_on` benign_task_success_rate of 0.0 is expected and worth flag
 
 #### 9.9.1 Internal Validity
 
-**Mock provider bias**: Most benchmarks use mock LLM providers with simulated latency. Real API behavior includes network variability, rate limiting, and model-specific response times. Mitigation: CI workflow supports real provider runs with API keys.
+**Mock provider bias**: Several benchmarks (parallel/cache ablations, type-safety corpus, HotpotQA) use a fixed-latency mock LLM (50 ms flat per call) to isolate runtime/orchestration jitter from model variance. Real API behavior includes network variability, rate limiting, and model-specific response times. Mitigation: Section 9.6.5 reports the same case study against real `gpt-4o-mini` (`real_api_v1.json`, 3 trials, $0.478349 total cost), and Section 9.8 reports the security suite against real `gpt-4o-mini` (`security_v1.json`).
 
 **Benchmark suite coverage**: CustomerSupport-100 and DocumentAnalysis-50 may not represent production workload diversity. Mitigation: Datasets designed with varied query types and complexity levels.
 
@@ -974,13 +974,18 @@ The `aether_taint_on` benign_task_success_rate of 0.0 is expected and worth flag
 
 **Type safety claims**: Compile-time detection rate measures errors in synthetic test cases. Real-world codebases may have different error distributions.
 
-**Cost estimates**: Based on published API pricing as of February 2026. Actual costs depend on response lengths and provider discounts.
+**Cost estimates**: Based on published API pricing as of May 2026. Actual costs depend on response lengths and provider discounts. The real-API run in Section 9.6.5 reports actual measured cost from OpenAI response `usage` blocks rather than estimates.
 
-#### 9.7.4 Runtime Availability
+#### 9.9.4 Hardware variance across measurement environments
 
-**Aether runtime not executed**: The Aether runtime requires MSVC toolchain for compilation, which was not available in the benchmark environment. Aether latency and cache metrics in this paper are projected based on design specifications (parallel execution of independent LLM calls, 60% cache hit rate based on prompt structure analysis). Baseline measurements (LangChain p50=91.4ms, DSPy p50=68.4ms) are empirically measured.
+The JSON files in `bench/results/` were not all measured on the same host. Specifically:
 
-**Mitigation**: Future work includes cross-platform builds and containerized benchmark environments. Readers can reproduce Aether results by installing Visual Studio Build Tools and running the benchmark suite per Section 13.
+- `aether_mock_v1.json`, `aether_real_api_v1.json`, `langchain_real_api_v1.json`, `dspy_real_api_v1.json`, `ablation_cache_v1.json`, `ablation_parallel_v1.json`, `ablation_typesafety_v1.json`, and `security_v1.json` were measured on `Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz`, RAM 7.71 GiB, Ubuntu 24.04.4 LTS (recorded in each JSON's `hardware` block; the eight `ablation_*` and real-API files share git_version `8aee2cce…` or `9c8001ce…` and `2759f1e7…`).
+- `langchain_v1.json`, `dspy_v1.json`, `hotpotqa_aether_v1.json`, `hotpotqa_langchain_v1.json`, and `hotpotqa_dspy_v1.json` were measured on Windows-11-10.0.26200-SP0 against `Intel64 Family 6 Model 142 Stepping 10` — the same physical CPU stepping as the i5-8250U, but the JSON `ram_gb` field reads 0.0 because the memory-detection helper does not work on Windows. The `cpu` and `os` fields *are* populated.
+
+**Implication.** Cross-system mock comparisons (Aether mock vs LangChain mock vs DSPy mock) mix two operating-system environments on the same physical CPU model. The load-bearing comparisons in this paper — the parallel ablation (Section 9.2), the cache ablation (Section 9.3), the type-safety corpus (Section 9.5), the real-API case study (Section 9.6.5), and the security suite (Section 9.8) — were all measured on one Linux host and are hardware-uniform. The HotpotQA latency table (Section 9.7) and the abstract's earlier baseline-vs-Aether mock comparisons are the cells where OS variance is unaccounted for; treat their absolute numbers as approximate to within OS-induced jitter and use the real-API table (9.6.5) as the canonical end-to-end comparison.
+
+**Mitigation.** Future runs should pin a single OS and CPU stepping for all systems and record `ram_gb` correctly on Windows. The benchmark driver `scripts/run_benchmark.py` already records the values into the JSON; the gap is environmental, not in the runner.
 
 
 ## 10. Testing and Evaluation Framework

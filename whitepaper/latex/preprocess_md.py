@@ -31,6 +31,36 @@ from pathlib import Path
 
 CITE_RE = re.compile(r"\[(\d+)\]")
 
+# Long floats (5+ decimals) inside markdown table cells render as cells
+# wide as half a column. The committed JSONs in bench/results/ retain
+# full precision; the markdown tables embedded in WHITEPAPER_ACADEMIC.md
+# happen to also carry full Python repr precision (e.g. 218.36999999999998).
+# Round those for display to 2 decimals; touch only `|`-prefixed table
+# lines so prose like '$0.128887' stays exact.
+LONG_FLOAT_RE = re.compile(r"\b\d+\.\d{5,}\b")
+
+# 40-char hex strings inside table cells are git SHA-1 references that
+# blow out the column. Truncate to 8 chars + ellipsis (still recoverable
+# via `git rev-parse` since 8 chars are unambiguous in this repo).
+SHA40_RE = re.compile(r"\b([0-9a-f]{40})\b")
+
+
+def _round_long_floats(s: str) -> str:
+    def repl(m: re.Match) -> str:
+        try:
+            return f"{float(m.group()):.2f}"
+        except ValueError:
+            return m.group()
+    return LONG_FLOAT_RE.sub(repl, s)
+
+
+def _truncate_shas(s: str) -> str:
+    return SHA40_RE.sub(lambda m: m.group(1)[:8] + "…", s)
+
+
+def _is_table_row(stripped: str) -> bool:
+    return stripped.startswith("|")
+
 # Body-text Unicode glyphs that the default Latin Modern Roman font does
 # not include. We translate them to inline math at preprocess time so
 # the PDF renders proper glyphs from the math font rather than tofu.
@@ -178,6 +208,12 @@ def preprocess(text: str) -> str:
         # inline math so the math font's glyph is used.
         for src, dst in BODY_TEXT_MATH.items():
             rewritten = rewritten.replace(src, dst)
+        # Markdown-table-only display fixes: round long Python-repr floats
+        # and truncate git SHA-1 hashes. Source-of-truth precision lives
+        # in bench/results/*.json; this is purely a rendering transform.
+        if _is_table_row(rewritten.lstrip()):
+            rewritten = _round_long_floats(rewritten)
+            rewritten = _truncate_shas(rewritten)
         out.append(rewritten)
         i += 1
 

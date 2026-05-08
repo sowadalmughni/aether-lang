@@ -1,0 +1,96 @@
+% whitepaper/latex/header.tex
+%
+% Preamble fragment injected into pandoc's default LaTeX template via
+% `--include-in-header`. Loads the arXiv preprint style and the
+% packages we need for code, tables, math, and Unicode glyphs that
+% appear in Aether's typing rules (Γ, ⊢, ↦, ⊥, etc.).
+%
+% Compiled with Tectonic (XeTeX backend); fontspec / unicode-math are
+% the right path for Unicode glyphs in body text. pdflatex would need
+% manual `\DeclareUnicodeCharacter` declarations.
+
+\usepackage{arxiv}
+
+\usepackage{amsmath,amssymb}
+
+% Pandoc's default LaTeX template already loads `unicode-math` (which
+% pulls in `fontspec`) when the engine is XeTeX/LuaTeX. We deliberately
+% do NOT call `\setmainfont`/`\setsansfont` here: by name, "Latin Modern
+% Roman" is not a Windows or macOS system font, and Tectonic's font
+% lookup goes through the OS font directory before its bundled TeX Live
+% tree. Letting XeTeX fall back to its default font (Computer
+% Modern / Latin Modern via NFSS) keeps the build host-agnostic.
+% arxiv.sty's `\renewcommand{\rmdefault}{ptm}` etc. then take effect.
+
+% Code listings (pandoc --listings).
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{gray!50},
+  backgroundcolor=\color{gray!5},
+  extendedchars=true,
+  inputencoding=utf8,
+  literate=
+    {Γ}{{$\Gamma$}}1
+    {⊢}{{$\vdash$}}1
+    {↦}{{$\mapsto$}}1
+    {⊥}{{$\bot$}}1
+    {α}{{$\alpha$}}1
+    {β}{{$\beta$}}1
+    {γ}{{$\gamma$}}1
+    {τ}{{$\tau$}}1
+    {ε}{{$\varepsilon$}}1
+    {≤}{{$\leq$}}1
+    {≥}{{$\geq$}}1
+    {≠}{{$\neq$}}1
+    {→}{{$\rightarrow$}}1
+    {←}{{$\leftarrow$}}1
+    {∈}{{$\in$}}1
+    {∉}{{$\notin$}}1
+    {∀}{{$\forall$}}1
+    {∃}{{$\exists$}}1
+    {⊕}{{$\oplus$}}1
+    {…}{{\ldots}}1
+    {–}{{--}}1
+    {—}{{---}}1
+    {×}{{$\times$}}1
+    {≈}{{$\approx$}}1
+    {─}{{\textendash\textendash}}1
+    {│}{{|}}1
+    {├}{{|--}}1
+    {└}{{`--}}1
+    {┌}{{,--}}1
+    {┐}{{--.}}1
+    {┘}{{--'}}1
+    {╴}{{--}}1
+    {╶}{{--}}1
+    {⌈}{{$\lceil$}}1
+    {⌉}{{$\rceil$}}1
+    {⌊}{{$\lfloor$}}1
+    {⌋}{{$\rfloor$}}1
+    {¬}{{$\neg$}}1
+    {∨}{{$\vee$}}1
+    {∧}{{$\wedge$}}1,
+}
+
+% Wide tables.
+\usepackage{longtable}
+\usepackage{booktabs}
+
+% Hyperlinks; load near the end of the preamble.
+\usepackage[hidelinks,unicode=true]{hyperref}
+\usepackage{microtype}
+
+% Tighter table column padding so the wide reproducibility table fits.
+\setlength{\tabcolsep}{4pt}
+
+% Allow long URLs to break.
+\usepackage{xurl}

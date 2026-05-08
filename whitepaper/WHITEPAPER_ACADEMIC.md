@@ -659,6 +659,25 @@ To isolate the contribution of each feature:
 2. **Parallelization ablation**: Compare sequential vs. parallel execution using `?sequential=true`
 3. **Type safety ablation**: Measure errors caught at compile time vs. runtime
 
+### 8.5 Statistical Methodology
+
+Every aggregate cell in Section 9 follows the convention `mean ± std [95% CI]`, where the CI is computed by bias-corrected and accelerated (BCa) bootstrap with `n_resamples=10000` and `seed=42`, falling back to the percentile method when per-trial variance is degenerate. The implementation lives in `_bootstrap_ci` at [`scripts/run_benchmark.py:546-593`](../scripts/run_benchmark.py) and is invoked uniformly by all benchmark drivers.
+
+**Trial counts.** The trial budget per (system, dataset, config) is recorded in the `trials_per_config` field of every JSON in `bench/results/`:
+
+- Mock-mode runs (`aether_mock_v1.json`, `langchain_v1.json`, `dspy_v1.json`) and the three ablations (`ablation_cache_v1.json`, `ablation_parallel_v1.json`, `ablation_typesafety_v1.json`): **5 trials**.
+- Real-API runs (`aether_real_api_v1.json`, `langchain_real_api_v1.json`, `dspy_real_api_v1.json`) and the security suite (`security_v1.json`) and the HotpotQA suite (`hotpotqa_*_v1.json`): **3 trials**, capped to control OpenAI cost (the real-API run hit `actual_cost_usd=0.478349` against a `budget_usd=10.0` gate).
+
+**Speedup ratios.** Speedup is computed by paired-trial bootstrap on the ratio `sequential.p50 / parallel.p50`, using the same BCa parameters. The definition string is recorded inside the speedup field of each `ablation_parallel_v1.json` `results[*].speedup` block (e.g. `results[2].speedup.definition`), so the metric definition travels with the data.
+
+**Cross-mode deltas.** Cache and parallelization comparisons across modes use paired-trial deltas (e.g. `latency_p50_delta_warm_vs_no_cache`, recorded in `ablation_cache_v1.json` `cross_mode_deltas`), again with the same BCa parameters.
+
+**Significance testing.** Pairwise differences are reported as overlapping/non-overlapping 95% CIs rather than as p-values from formal hypothesis tests. The reader can read significance off the CIs directly; we did not run separate Welch's t-tests or Mann–Whitney U tests. This is a deliberate scope cut: the trial counts are small (3–5) and the load-bearing comparisons (e.g. parallel speedup) have CIs that do not overlap 1.0 by margins of multiple standard deviations.
+
+**Mock-mode determinism.** The mock LLM provider returns a fixed-latency placeholder (50 ms flat per call, per [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md) methodology footer). Trial-to-trial variance in mock runs therefore reflects scheduler and HTTP-loopback jitter only, not model behavior. This is why mock-mode standard deviations are sub-millisecond on most cells.
+
+**Hardware uniformity.** All ablation files (`ablation_*.json`) and `aether_mock_v1.json` were measured on `Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz`, RAM 7.71 GiB, Ubuntu 24.04.4 LTS (recorded in each JSON's `hardware` block). The real-API runs were measured on the same Linux host. The `langchain_v1.json`, `dspy_v1.json`, and `hotpotqa_*_v1.json` mock runs were measured on Windows-11 against the same physical CPU model; cross-OS variance is discussed in Section 9.7.4.
+
 
 ## 9. Evaluation Results
 

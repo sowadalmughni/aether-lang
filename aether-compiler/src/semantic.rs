@@ -369,6 +369,18 @@ pub enum SymbolKind {
     Variable { ty: TypeInfo },
     /// A function parameter
     Parameter { ty: TypeInfo },
+    /// A compiler-provided built-in. Currently only `sanitize`, which is
+    /// polymorphic in its argument type (returns the same type as the
+    /// argument it was called with).
+    Builtin { kind: BuiltinKind },
+}
+
+/// Distinguishes the (currently single) built-ins the compiler provides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinKind {
+    /// `sanitize(x: T) -> T` — identity on the value type, but produces a
+    /// `Trusted` taint level regardless of the input's taint.
+    Sanitize,
 }
 
 /// Information about an enum variant.
@@ -534,7 +546,8 @@ impl SymbolTable {
                 scope.iter().filter_map(|(name, sym)| match &sym.kind {
                     SymbolKind::LlmFn { .. }
                     | SymbolKind::Function { .. }
-                    | SymbolKind::Flow { .. } => Some(name.as_str()),
+                    | SymbolKind::Flow { .. }
+                    | SymbolKind::Builtin { .. } => Some(name.as_str()),
                     _ => None,
                 })
             })
@@ -644,7 +657,7 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        Self {
+        let mut analyzer = Self {
             context: SemanticContext {
                 symbols: SymbolTable::new(),
                 llm_functions: HashMap::new(),
@@ -652,12 +665,14 @@ impl SemanticAnalyzer {
                 errors: Vec::new(),
             },
             source: String::new(),
-        }
+        };
+        analyzer.register_builtins();
+        analyzer
     }
 
     /// Create analyzer with source text for better error reporting.
     pub fn with_source(source: &str) -> Self {
-        Self {
+        let mut analyzer = Self {
             context: SemanticContext {
                 symbols: SymbolTable::new(),
                 llm_functions: HashMap::new(),
@@ -665,7 +680,24 @@ impl SemanticAnalyzer {
                 errors: Vec::new(),
             },
             source: source.to_string(),
-        }
+        };
+        analyzer.register_builtins();
+        analyzer
+    }
+
+    /// Pre-register compiler built-ins in the global scope. Currently only
+    /// `sanitize`. The synthetic span (0..0) is intentional: built-ins have
+    /// no source location, and using a zero-span avoids confusing line/column
+    /// values in shadowing-error messages (the offending user definition's
+    /// span is reported instead).
+    fn register_builtins(&mut self) {
+        let _ = self.context.symbols.define(Symbol {
+            name: "sanitize".to_string(),
+            kind: SymbolKind::Builtin {
+                kind: BuiltinKind::Sanitize,
+            },
+            span: Span::new(0, 0),
+        });
     }
 
     fn line_col(&self, span: &Span) -> (usize, usize) {
@@ -679,6 +711,41 @@ impl SemanticAnalyzer {
     fn add_error(&mut self, error: SemanticError) {
         if self.context.errors.len() < MAX_ERRORS {
             self.context.errors.push(error);
+        }
+    }
+
+    /// Emit the right error variant when a top-level definition conflicts with
+    /// an already-registered name. If the prior symbol is a compiler built-in
+    /// (currently only `sanitize`) we report `SanitizeShadowed`; otherwise we
+    /// fall back to `DuplicateDefinition`. Callers pass the name being defined,
+    /// the new definition's span, and the prior definition's span (returned by
+    /// `SymbolTable::define` when it rejects the insertion).
+    fn report_definition_conflict(
+        &mut self,
+        name: &str,
+        def_span: &Span,
+        first_span: &Span,
+    ) {
+        let is_builtin_shadow = matches!(
+            self.context.symbols.lookup(name).map(|s| &s.kind),
+            Some(SymbolKind::Builtin { .. })
+        );
+        let (line, col) = self.line_col(def_span);
+        if is_builtin_shadow {
+            self.add_error(SemanticError::SanitizeShadowed {
+                span: def_span.clone(),
+                line,
+                column: col,
+            });
+        } else {
+            let (first_line, _) = self.line_col(first_span);
+            self.add_error(SemanticError::DuplicateDefinition {
+                name: name.to_string(),
+                span: def_span.clone(),
+                line,
+                column: col,
+                first_line,
+            });
         }
     }
 
@@ -804,15 +871,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -834,15 +893,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -864,15 +915,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -888,15 +931,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Struct { fields },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -918,15 +953,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Enum { variants },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -942,15 +969,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Context { fields },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -962,15 +981,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::TypeAlias { target },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -1518,6 +1529,25 @@ impl SemanticAnalyzer {
                             params,
                             return_type,
                         } => (params.clone(), return_type.clone()),
+                        SymbolKind::Builtin {
+                            kind: BuiltinKind::Sanitize,
+                        } => {
+                            // sanitize(x: T) -> T. Validate arity (exactly one
+                            // argument) and forward the argument's inferred type
+                            // as the result type.
+                            if args.len() != 1 {
+                                let (line, _) = self.line_col(span);
+                                self.add_error(SemanticError::ArgumentCountMismatch {
+                                    fn_name: fn_name.clone(),
+                                    expected: 1,
+                                    found: args.len(),
+                                    span: span.clone(),
+                                    line,
+                                });
+                                return TypeInfo::Unknown;
+                            }
+                            return self.infer_expr_type(&args[0], local_types);
+                        }
                         _ => {
                             let (_line, _col) = self.line_col(span);
                             self.add_error(SemanticError::Generic {
@@ -2290,5 +2320,83 @@ mod tests {
 
         let suggestion = suggest_similar("xyz", &candidates, 3);
         assert!(suggestion.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // Built-in registration (sanitize)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_sanitize_builtin_registered_in_global_scope() {
+        let analyzer = SemanticAnalyzer::new();
+        let sym = analyzer
+            .context
+            .symbols
+            .lookup("sanitize")
+            .expect("sanitize must be pre-registered");
+        assert!(matches!(
+            sym.kind,
+            SymbolKind::Builtin {
+                kind: BuiltinKind::Sanitize
+            }
+        ));
+    }
+
+    #[test]
+    fn test_sanitize_call_passes_with_one_arg() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(input: string) -> string {
+                let cleaned = sanitize(input);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        let result = analyze(source);
+        assert!(
+            result.is_ok(),
+            "expected sanitize() to type-check; got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_sanitize_wrong_arity_reports_error() {
+        let source = r#"
+            flow run(input: string) -> string {
+                let bad = sanitize(input, input);
+                return bad;
+            }
+        "#;
+        let errs = analyze(source).expect_err("sanitize requires exactly 1 arg");
+        assert!(
+            errs.iter().any(|e| matches!(
+                e,
+                SemanticError::ArgumentCountMismatch { fn_name, expected: 1, found: 2, .. }
+                    if fn_name == "sanitize"
+            )),
+            "expected ArgumentCountMismatch on sanitize, got: {:?}",
+            errs
+        );
+    }
+
+    #[test]
+    fn test_user_function_named_sanitize_reports_shadowing() {
+        let source = r#"
+            fn sanitize(x: string) -> string {
+                return x;
+            }
+        "#;
+        let errs = analyze(source).expect_err("user-defined sanitize must be rejected");
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::SanitizeShadowed { .. })),
+            "expected SanitizeShadowed, got: {:?}",
+            errs
+        );
     }
 }

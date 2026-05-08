@@ -745,15 +745,11 @@ Cache hit rate, p50 latency, and warm-vs-no-cache delta across three cache modes
 
 ### 9.4 Code Complexity Comparison
 
-Lines of code comparison for equivalent functionality:
+**We did not measure equivalent-functionality LOC for this paper revision.** An earlier draft reported 253/287 (LangChain), 283/312 (DSPy), 78/111 (Aether) lines for the CustomerSupport-Triage and DocumentAnalysis-Pipeline case studies, but those numbers are not anchored to any JSON file in `bench/results/` and the Aether source artifacts they were extracted from (standalone `customer_support_triage.aether` and `document_analysis_pipeline.aether` programs equivalent to the LangChain triage/extraction blocks at [`bench/baselines/langchain_baseline.py:289-376`](../bench/baselines/langchain_baseline.py#L289-L376) and DSPy equivalents) are not committed in the repository at the commits listed in the Reproducibility callout.
 
-| Implementation | CustomerSupport Triage | DocumentAnalysis Pipeline | Average Reduction |
-|----------------|----------------------|---------------------------|-------------------|
-| Python + LangChain | 253 | 287 | baseline |
-| Python + DSPy | 283 | 312 | -10% |
-| Aether | 78 | 111 | 65% |
+A partial LOC comparison is possible: the LangChain triage chain (`build_triage_chain`, [`bench/baselines/langchain_baseline.py:299-329`](../bench/baselines/langchain_baseline.py#L299-L329)) and extraction chain (`build_extraction_chain`, [`bench/baselines/langchain_baseline.py:355-376`](../bench/baselines/langchain_baseline.py#L355-L376)) are the case-study sources for the Python side. Counting the Aether side requires checking in the equivalent `.aether` programs first. We deferred that step to a follow-up paper revision rather than report unbacked numbers in the current one.
 
-**Note**: LOC includes error handling, type definitions, and test code. Excludes comments and blank lines.
+Reading guidance: the *qualitative* code-complexity contrast — Aether's `flow` keyword and `llm fn` declaration vs LangChain's chain-of-LCEL-pipes or DSPy's `Module`/`Predict` boilerplate — is documented in Section 6 (the case-study code listings at lines 762-829 are themselves a small visual benchmark). LOC numbers will return in a future revision once the matched `.aether` sources land in `bench/datasets/` or `examples/`.
 
 ### 9.5 Type Safety Analysis (H1)
 

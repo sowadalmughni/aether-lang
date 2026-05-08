@@ -1,0 +1,23 @@
+// Field-level taint annotation. A struct field marked `@untrusted`
+// produces an Untrusted value when accessed via `.field`, even when
+// the surrounding struct-typed binding has no decorator of its own.
+// The flow sanitizes the field's value before it reaches the prompt,
+// so the program is clean.
+//
+// Expected: `aetherc check examples/taint_examples/struct_field.aether` -> exit 0.
+
+struct Request {
+    @untrusted user_text: string,
+    user_id: int
+}
+
+llm fn answer(question: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Answer concisely: {{question}}"
+}
+
+flow handle(req: Request) -> string {
+    let cleaned = sanitize(req.user_text);
+    let reply = answer(cleaned);
+    return reply;
+}

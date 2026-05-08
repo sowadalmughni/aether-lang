@@ -1,0 +1,16 @@
+// Clean baseline: no taint annotations anywhere. Pass 6 is effectively
+// a no-op because every binding's TaintLevel is `Unknown` (the lattice
+// bottom), and Pass 6 only fires on definitely-Untrusted values
+// reaching a prompt.
+//
+// Expected: `aetherc check examples/taint_examples/clean.aether` -> exit 0.
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify the sentiment of: {{text}}"
+}
+
+flow run(input: string) -> string {
+    let label = classify(input);
+    return label;
+}

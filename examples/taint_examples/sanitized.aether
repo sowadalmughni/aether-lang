@@ -1,0 +1,20 @@
+// Correct usage of `@untrusted` + `sanitize`.
+//
+// `input` is marked untrusted at the flow boundary (it came from a user
+// or another untrusted source). Before it reaches an LLM prompt, it is
+// passed through the compiler-recognized built-in `sanitize(...)`,
+// which the taint pass treats as the only escape hatch from
+// `Untrusted` back to `Trusted`.
+//
+// Expected: `aetherc check examples/taint_examples/sanitized.aether` -> exit 0.
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify the sentiment of: {{text}}"
+}
+
+flow run(@untrusted input: string) -> string {
+    let cleaned = sanitize(input);
+    let label = classify(cleaned);
+    return label;
+}

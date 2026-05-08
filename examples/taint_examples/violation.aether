@@ -1,0 +1,29 @@
+// Direct taint violation: an `@untrusted` value reaches an LLM prompt
+// without being wrapped in `sanitize(...)`.
+//
+// This is the file the acceptance criterion runs `aetherc check`
+// against. Expected output:
+//
+//   $ aetherc check examples/taint_examples/violation.aether
+//   Check failed: examples/taint_examples/violation.aether
+//     - Taint violation: untrusted data from `input` reaches LLM
+//       function 'classify' at line ..., column ... without passing
+//       through `sanitize(...)`. Wrap the value in `sanitize(...)`
+//       before it flows into the prompt.
+//   Error:   × 1 error(s) found
+//   exit=1
+//
+// To override (security-benchmark ablation control only — do NOT do
+// this in production):
+//
+//   aetherc check --no-taint-check examples/taint_examples/violation.aether
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify the sentiment of: {{text}}"
+}
+
+flow run(@untrusted input: string) -> string {
+    let label = classify(input);
+    return label;
+}

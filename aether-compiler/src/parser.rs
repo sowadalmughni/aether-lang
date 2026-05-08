@@ -403,6 +403,7 @@ impl<'src> Parser<'src> {
 
         while !self.check(TokenKind::RBrace) && !self.is_at_end() {
             let field_start = self.current_span_start();
+            let decorators = self.parse_decorators()?;
             let name_tok = self.expect(TokenKind::Ident)?;
             let name = Spanned::new(
                 name_tok.text.to_string(),
@@ -416,6 +417,7 @@ impl<'src> Parser<'src> {
             fields.push(Field {
                 name,
                 ty,
+                decorators,
                 span: Span::new(field_start, field_end),
             });
 
@@ -646,6 +648,7 @@ impl<'src> Parser<'src> {
         let mut params = Vec::new();
         while !self.check(TokenKind::RParen) && !self.is_at_end() {
             let param_start = self.current_span_start();
+            let decorators = self.parse_decorators()?;
             let name_tok = self.expect(TokenKind::Ident)?;
             let name = Spanned::new(
                 name_tok.text.to_string(),
@@ -659,6 +662,7 @@ impl<'src> Parser<'src> {
             params.push(Param {
                 name,
                 ty,
+                decorators,
                 span: Span::new(param_start, param_end),
             });
 
@@ -1912,6 +1916,92 @@ mod tests {
         if let Item::Context(c) = &program.items[0] {
             assert_eq!(c.name.node, "ConversationState");
             assert_eq!(c.fields.len(), 2);
+        } else {
+            panic!("Expected context");
+        }
+    }
+
+    #[test]
+    fn test_parse_param_decorator_untrusted() {
+        let source = r#"
+            llm fn classify(@untrusted query: string) -> string {
+                model: "gpt-4o",
+                prompt: "Classify: {{query}}"
+            }
+        "#;
+        let program = parse(source).unwrap();
+
+        if let Item::LlmFn(f) = &program.items[0] {
+            assert_eq!(f.params.len(), 1);
+            let p = &f.params[0];
+            assert_eq!(p.name.node, "query");
+            assert_eq!(p.decorators.len(), 1);
+            assert_eq!(p.decorators[0].name.node, "untrusted");
+            assert!(p.decorators[0].args.is_empty());
+        } else {
+            panic!("Expected llm fn");
+        }
+    }
+
+    #[test]
+    fn test_parse_param_decorator_mixed_with_plain_param() {
+        let source = r#"
+            llm fn classify(@trusted sys_id: int, raw: string) -> string {
+                model: "gpt-4o",
+                prompt: "id={{sys_id}} raw={{raw}}"
+            }
+        "#;
+        let program = parse(source).unwrap();
+
+        if let Item::LlmFn(f) = &program.items[0] {
+            assert_eq!(f.params.len(), 2);
+            assert_eq!(f.params[0].decorators.len(), 1);
+            assert_eq!(f.params[0].decorators[0].name.node, "trusted");
+            assert_eq!(f.params[1].decorators.len(), 0);
+        } else {
+            panic!("Expected llm fn");
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_field_decorator() {
+        let source = r#"
+            struct Request {
+                @untrusted user_text: string,
+                @trusted system_id: int,
+                payload: string
+            }
+        "#;
+        let program = parse(source).unwrap();
+
+        if let Item::Struct(s) = &program.items[0] {
+            assert_eq!(s.fields.len(), 3);
+            assert_eq!(s.fields[0].name.node, "user_text");
+            assert_eq!(s.fields[0].decorators.len(), 1);
+            assert_eq!(s.fields[0].decorators[0].name.node, "untrusted");
+            assert_eq!(s.fields[1].decorators.len(), 1);
+            assert_eq!(s.fields[1].decorators[0].name.node, "trusted");
+            assert_eq!(s.fields[2].decorators.len(), 0);
+        } else {
+            panic!("Expected struct");
+        }
+    }
+
+    #[test]
+    fn test_parse_context_field_decorator() {
+        let source = r#"
+            context Session {
+                @untrusted last_user_msg: string,
+                user_id: int
+            }
+        "#;
+        let program = parse(source).unwrap();
+
+        if let Item::Context(c) = &program.items[0] {
+            assert_eq!(c.fields.len(), 2);
+            assert_eq!(c.fields[0].decorators.len(), 1);
+            assert_eq!(c.fields[0].decorators[0].name.node, "untrusted");
+            assert_eq!(c.fields[1].decorators.len(), 0);
         } else {
             panic!("Expected context");
         }

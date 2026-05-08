@@ -179,6 +179,82 @@ pub enum SemanticError {
         span: Span,
         line: usize,
     },
+
+    #[error(
+        "Taint violation: untrusted data from {origin} reaches LLM function '{llm_fn_name}' \
+        at line {line}, column {column} without passing through `sanitize(...)`. \
+        Wrap the value in `sanitize(...)` before it flows into the prompt."
+    )]
+    TaintViolation {
+        /// Name of the binding/parameter where the taint originated.
+        origin: String,
+        /// Name of the llm fn whose prompt the untrusted value reaches.
+        llm_fn_name: String,
+        span: Span,
+        line: usize,
+        column: usize,
+    },
+
+    #[error(
+        "Conflicting taint decorators on '{name}' at line {line}: \
+        cannot mark both `@trusted` and `@untrusted`."
+    )]
+    ConflictingTaintDecorators {
+        name: String,
+        span: Span,
+        line: usize,
+    },
+
+    #[error(
+        "Cannot shadow built-in `sanitize` at line {line}, column {column}. \
+        `sanitize` is reserved for the compile-time taint pass."
+    )]
+    SanitizeShadowed {
+        span: Span,
+        line: usize,
+        column: usize,
+    },
+}
+
+// =============================================================================
+// SECTION: Taint metadata
+// =============================================================================
+// Future extraction target: semantic/taint.rs
+//
+// The taint pass tracks each binding's `TaintLevel` independently of its
+// `TypeInfo`. Levels form a small lattice with `Untrusted` as the top
+// (most-restrictive) element: when joining two levels (e.g. across a let
+// binding's RHS or an if/else branch), the result is the more restrictive
+// of the two.
+
+/// Compile-time taint classification for a value or binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaintLevel {
+    /// Default classification when no `@trusted` / `@untrusted` decorator
+    /// applies and no upstream binding is known to be untrusted. The taint
+    /// pass treats `Unknown` as trusted for the purpose of allowing prompt
+    /// substitution (i.e. it only emits errors for definitely-untrusted
+    /// data); this avoids spurious violations on programs that do not opt
+    /// into the taint model at all.
+    Unknown,
+    /// Explicitly marked as safe via `@trusted`, or produced by `sanitize(...)`.
+    Trusted,
+    /// Explicitly marked as `@untrusted`, or transitively derived from an
+    /// untrusted source without passing through `sanitize(...)`.
+    Untrusted,
+}
+
+impl TaintLevel {
+    /// Lattice join: the more restrictive of `self` and `other`.
+    /// Untrusted dominates Trusted, which dominates Unknown.
+    pub fn join(self, other: TaintLevel) -> TaintLevel {
+        use TaintLevel::*;
+        match (self, other) {
+            (Untrusted, _) | (_, Untrusted) => Untrusted,
+            (Trusted, _) | (_, Trusted) => Trusted,
+            _ => Unknown,
+        }
+    }
 }
 
 pub type SemanticResult<T> = Result<T, Vec<SemanticError>>;
@@ -293,6 +369,18 @@ pub enum SymbolKind {
     Variable { ty: TypeInfo },
     /// A function parameter
     Parameter { ty: TypeInfo },
+    /// A compiler-provided built-in. Currently only `sanitize`, which is
+    /// polymorphic in its argument type (returns the same type as the
+    /// argument it was called with).
+    Builtin { kind: BuiltinKind },
+}
+
+/// Distinguishes the (currently single) built-ins the compiler provides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinKind {
+    /// `sanitize(x: T) -> T` — identity on the value type, but produces a
+    /// `Trusted` taint level regardless of the input's taint.
+    Sanitize,
 }
 
 /// Information about an enum variant.
@@ -458,7 +546,8 @@ impl SymbolTable {
                 scope.iter().filter_map(|(name, sym)| match &sym.kind {
                     SymbolKind::LlmFn { .. }
                     | SymbolKind::Function { .. }
-                    | SymbolKind::Flow { .. } => Some(name.as_str()),
+                    | SymbolKind::Flow { .. }
+                    | SymbolKind::Builtin { .. } => Some(name.as_str()),
                     _ => None,
                 })
             })
@@ -568,7 +657,7 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        Self {
+        let mut analyzer = Self {
             context: SemanticContext {
                 symbols: SymbolTable::new(),
                 llm_functions: HashMap::new(),
@@ -576,12 +665,14 @@ impl SemanticAnalyzer {
                 errors: Vec::new(),
             },
             source: String::new(),
-        }
+        };
+        analyzer.register_builtins();
+        analyzer
     }
 
     /// Create analyzer with source text for better error reporting.
     pub fn with_source(source: &str) -> Self {
-        Self {
+        let mut analyzer = Self {
             context: SemanticContext {
                 symbols: SymbolTable::new(),
                 llm_functions: HashMap::new(),
@@ -589,7 +680,24 @@ impl SemanticAnalyzer {
                 errors: Vec::new(),
             },
             source: source.to_string(),
-        }
+        };
+        analyzer.register_builtins();
+        analyzer
+    }
+
+    /// Pre-register compiler built-ins in the global scope. Currently only
+    /// `sanitize`. The synthetic span (0..0) is intentional: built-ins have
+    /// no source location, and using a zero-span avoids confusing line/column
+    /// values in shadowing-error messages (the offending user definition's
+    /// span is reported instead).
+    fn register_builtins(&mut self) {
+        let _ = self.context.symbols.define(Symbol {
+            name: "sanitize".to_string(),
+            kind: SymbolKind::Builtin {
+                kind: BuiltinKind::Sanitize,
+            },
+            span: Span::new(0, 0),
+        });
     }
 
     fn line_col(&self, span: &Span) -> (usize, usize) {
@@ -606,12 +714,59 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Emit the right error variant when a top-level definition conflicts with
+    /// an already-registered name. If the prior symbol is a compiler built-in
+    /// (currently only `sanitize`) we report `SanitizeShadowed`; otherwise we
+    /// fall back to `DuplicateDefinition`. Callers pass the name being defined,
+    /// the new definition's span, and the prior definition's span (returned by
+    /// `SymbolTable::define` when it rejects the insertion).
+    fn report_definition_conflict(
+        &mut self,
+        name: &str,
+        def_span: &Span,
+        first_span: &Span,
+    ) {
+        let is_builtin_shadow = matches!(
+            self.context.symbols.lookup(name).map(|s| &s.kind),
+            Some(SymbolKind::Builtin { .. })
+        );
+        let (line, col) = self.line_col(def_span);
+        if is_builtin_shadow {
+            self.add_error(SemanticError::SanitizeShadowed {
+                span: def_span.clone(),
+                line,
+                column: col,
+            });
+        } else {
+            let (first_line, _) = self.line_col(first_span);
+            self.add_error(SemanticError::DuplicateDefinition {
+                name: name.to_string(),
+                span: def_span.clone(),
+                line,
+                column: col,
+                first_line,
+            });
+        }
+    }
+
     fn should_continue(&self) -> bool {
         self.context.errors.len() < MAX_ERRORS
     }
 
     /// Analyze a program and return the semantic context.
-    pub fn analyze(mut self, program: &Program) -> SemanticResult<SemanticContext> {
+    pub fn analyze(self, program: &Program) -> SemanticResult<SemanticContext> {
+        self.analyze_with_options(program, SemanticOptions::default())
+    }
+
+    /// Same as `analyze`, but with knobs that callers (e.g. the CLI) need
+    /// for ablations. Currently the only knob is `skip_taint_pass`, used
+    /// by `aetherc check --no-taint-check` to disable the compile-time
+    /// taint pass for evaluation control runs.
+    pub fn analyze_with_options(
+        mut self,
+        program: &Program,
+        options: SemanticOptions,
+    ) -> SemanticResult<SemanticContext> {
         // Pass 1: Collect all type definitions and function signatures
         for item in &program.items {
             self.collect_item(item);
@@ -664,6 +819,17 @@ impl SemanticAnalyzer {
                     break;
                 }
             }
+        }
+
+        // Pass 6: Compile-time taint analysis. Strict v1 policy: any value
+        // marked `@untrusted` (directly, transitively, or via a struct/context
+        // field decorator) that reaches an llm fn prompt without passing
+        // through `sanitize(...)` is a `TaintViolation`.
+        //
+        // Skipped when `options.skip_taint_pass` is set; that is the
+        // ablation control used by the security benchmark.
+        if self.should_continue() && !options.skip_taint_pass {
+            self.analyze_taint(program);
         }
 
         if self.context.errors.is_empty() {
@@ -728,15 +894,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -758,15 +916,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -788,15 +938,7 @@ impl SemanticAnalyzer {
             },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -812,15 +954,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Struct { fields },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -842,15 +976,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Enum { variants },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -866,15 +992,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::Context { fields },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -886,15 +1004,7 @@ impl SemanticAnalyzer {
             kind: SymbolKind::TypeAlias { target },
             span: def.span.clone(),
         }) {
-            let (line, col) = self.line_col(&def.span);
-            let (first_line, _) = self.line_col(&first_span);
-            self.add_error(SemanticError::DuplicateDefinition {
-                name: def.name.node.clone(),
-                span: def.span.clone(),
-                line,
-                column: col,
-                first_line,
-            });
+            self.report_definition_conflict(&def.name.node, &def.span, &first_span);
         }
     }
 
@@ -1442,6 +1552,25 @@ impl SemanticAnalyzer {
                             params,
                             return_type,
                         } => (params.clone(), return_type.clone()),
+                        SymbolKind::Builtin {
+                            kind: BuiltinKind::Sanitize,
+                        } => {
+                            // sanitize(x: T) -> T. Validate arity (exactly one
+                            // argument) and forward the argument's inferred type
+                            // as the result type.
+                            if args.len() != 1 {
+                                let (line, _) = self.line_col(span);
+                                self.add_error(SemanticError::ArgumentCountMismatch {
+                                    fn_name: fn_name.clone(),
+                                    expected: 1,
+                                    found: args.len(),
+                                    span: span.clone(),
+                                    line,
+                                });
+                                return TypeInfo::Unknown;
+                            }
+                            return self.infer_expr_type(&args[0], local_types);
+                        }
                         _ => {
                             let (_line, _col) = self.line_col(span);
                             self.add_error(SemanticError::Generic {
@@ -1763,6 +1892,631 @@ impl SemanticAnalyzer {
 impl Default for SemanticAnalyzer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// =============================================================================
+// SECTION: Pass 6 — Taint Analysis
+// =============================================================================
+// Future extraction target: semantic/taint.rs
+//
+// This pass runs after Passes 1–5 have populated the symbol table, the
+// `LlmFnInfo` map (with `validated_template_refs`), and the per-flow type
+// environment. It walks each flow's body, propagates `TaintLevel` through
+// let bindings, struct field access, and function calls, and emits a
+// `TaintViolation` whenever an untrusted value reaches a prompt template
+// substitution without first passing through `sanitize(...)`.
+//
+// The strict v1 policy is: any `@untrusted` value reaching *any* prompt
+// slot (`prompt:`, `system:`, `user:`) is a violation. The whitepaper
+// §10.2 example permitting untrusted in `user:` is documented as future
+// work in Phase C.
+
+/// Knobs threaded through `analyze_with_options`. Currently only one,
+/// used to disable Pass 6 for the security-benchmark ablation control.
+#[derive(Debug, Clone, Default)]
+pub struct SemanticOptions {
+    pub skip_taint_pass: bool,
+}
+
+/// Cached per-llm-fn taint metadata, computed once at the start of Pass 6.
+#[derive(Debug, Clone, Default)]
+struct LlmFnTaintProfile {
+    /// Names of parameters that appear in any `Parameter`-kind template
+    /// reference inside one of this llm fn's prompt slots. These are the
+    /// parameters whose values *do* reach the prompt at runtime.
+    promptable_params: HashSet<String>,
+}
+
+impl SemanticAnalyzer {
+    fn analyze_taint(&mut self, program: &Program) {
+        // 1. Build the per-llm-fn promptable-param set.
+        let profiles = self.build_llm_taint_profiles();
+
+        // 2. Build per-(struct/context, field) declared taint table.
+        //    Field decorators on a struct or context flow into the field's
+        //    taint level when accessed via `obj.field`.
+        let field_taints = self.build_field_taint_table(program);
+
+        // 3. For each llm fn, validate its own param taint annotations and
+        //    detect direct violations: any param that is `@untrusted` and
+        //    appears in the prompt is a TaintViolation at the llm fn site.
+        //    (This catches violations independent of the call site.)
+        for item in &program.items {
+            if !self.should_continue() {
+                break;
+            }
+            if let Item::LlmFn(def) = item {
+                self.check_llm_fn_param_taint(def, &profiles);
+            }
+        }
+
+        // 4. For each flow, walk statements and check taint at every llm
+        //    fn call site. Untrusted args flowing into promptable params
+        //    are violations.
+        for item in &program.items {
+            if !self.should_continue() {
+                break;
+            }
+            if let Item::Flow(def) = item {
+                self.check_flow_taint(def, &profiles, &field_taints);
+            }
+        }
+    }
+
+    /// Walk each `LlmFnInfo`'s prompt templates (system / user / prompt)
+    /// and collect the set of parameter names referenced via `{{var}}`.
+    /// Pass 3 stores the parsed `StringTemplate`s on the LlmFnInfo but
+    /// does *not* populate `validated_template_refs`, so we read the
+    /// templates directly. Anything that is not a parameter name (e.g.
+    /// `context.foo` or `node.X.output`) is filtered out by intersecting
+    /// against the llm fn's declared param set.
+    fn build_llm_taint_profiles(&self) -> HashMap<String, LlmFnTaintProfile> {
+        let mut profiles: HashMap<String, LlmFnTaintProfile> = HashMap::new();
+        for (name, info) in &self.context.llm_functions {
+            let declared_params: HashSet<String> =
+                info.params.iter().map(|(n, _)| n.clone()).collect();
+            let mut profile = LlmFnTaintProfile::default();
+            let templates = [
+                info.prompt.as_ref(),
+                info.user_prompt.as_ref(),
+                info.system_prompt.as_ref(),
+            ];
+            for tmpl in templates.iter().flatten() {
+                for part in &tmpl.parts {
+                    if let TemplatePart::Variable(var) = part {
+                        if declared_params.contains(var) {
+                            profile.promptable_params.insert(var.clone());
+                        }
+                    }
+                }
+            }
+            profiles.insert(name.clone(), profile);
+        }
+        profiles
+    }
+
+    /// Walk every struct and context definition in the program and record
+    /// declared taint for each field that carries an `@untrusted` /
+    /// `@trusted` decorator. Returns a (type_name, field_name) -> taint
+    /// table. Conflicting decorators on a single field are reported here.
+    fn build_field_taint_table(
+        &mut self,
+        program: &Program,
+    ) -> HashMap<(String, String), TaintLevel> {
+        let mut table = HashMap::new();
+        for item in &program.items {
+            match item {
+                Item::Struct(def) => {
+                    for field in &def.fields {
+                        if let Some(level) =
+                            self.taint_from_decorators(&field.decorators, &field.name.node)
+                        {
+                            table.insert(
+                                (def.name.node.clone(), field.name.node.clone()),
+                                level,
+                            );
+                        }
+                    }
+                }
+                Item::Context(def) => {
+                    for field in &def.fields {
+                        if let Some(level) =
+                            self.taint_from_decorators(&field.decorators, &field.name.node)
+                        {
+                            table.insert(
+                                (def.name.node.clone(), field.name.node.clone()),
+                                level,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        table
+    }
+
+    /// Read `@untrusted` / `@trusted` from a decorator slice. Returns
+    /// `None` when neither is present (callers treat that as `Unknown`).
+    /// Emits `ConflictingTaintDecorators` if both are present, then
+    /// pessimistically returns `Untrusted` so downstream checks treat the
+    /// binding as tainted (fail-closed).
+    fn taint_from_decorators(
+        &mut self,
+        decorators: &[Decorator],
+        name: &str,
+    ) -> Option<TaintLevel> {
+        let mut has_trusted = false;
+        let mut has_untrusted = false;
+        let mut conflict_span: Option<&Span> = None;
+        for d in decorators {
+            match d.name.node.as_str() {
+                "trusted" => {
+                    has_trusted = true;
+                    conflict_span = Some(&d.span);
+                }
+                "untrusted" => {
+                    has_untrusted = true;
+                    conflict_span = Some(&d.span);
+                }
+                _ => {} // unknown decorators are silently ignored (matches existing decorator handling)
+            }
+        }
+        if has_trusted && has_untrusted {
+            let span = conflict_span.cloned().unwrap_or_else(|| Span::new(0, 0));
+            let (line, _) = self.line_col(&span);
+            self.add_error(SemanticError::ConflictingTaintDecorators {
+                name: name.to_string(),
+                span,
+                line,
+            });
+            return Some(TaintLevel::Untrusted);
+        }
+        if has_untrusted {
+            return Some(TaintLevel::Untrusted);
+        }
+        if has_trusted {
+            return Some(TaintLevel::Trusted);
+        }
+        None
+    }
+
+    /// Check an llm fn's own params against its prompt usage. An
+    /// `@untrusted` param that appears in any prompt slot is a direct
+    /// violation, reported at the param's span.
+    fn check_llm_fn_param_taint(
+        &mut self,
+        def: &LlmFnDef,
+        profiles: &HashMap<String, LlmFnTaintProfile>,
+    ) {
+        let profile = match profiles.get(&def.name.node) {
+            Some(p) => p.clone(),
+            None => return,
+        };
+        for param in &def.params {
+            let level = self.taint_from_decorators(&param.decorators, &param.name.node);
+            if matches!(level, Some(TaintLevel::Untrusted))
+                && profile.promptable_params.contains(&param.name.node)
+            {
+                let (line, col) = self.line_col(&param.span);
+                self.add_error(SemanticError::TaintViolation {
+                    origin: format!("parameter `{}`", param.name.node),
+                    llm_fn_name: def.name.node.clone(),
+                    span: param.span.clone(),
+                    line,
+                    column: col,
+                });
+            }
+        }
+    }
+
+    /// Walk a flow's body, propagating taint and checking call sites.
+    fn check_flow_taint(
+        &mut self,
+        def: &FlowDef,
+        profiles: &HashMap<String, LlmFnTaintProfile>,
+        field_taints: &HashMap<(String, String), TaintLevel>,
+    ) {
+        // Initialize the per-binding taint environment from flow params.
+        let mut env: HashMap<String, TaintLevel> = HashMap::new();
+        // Per-binding type environment, scoped just for taint use. We
+        // mirror the type information that Pass 4 already computed but
+        // do not modify the canonical local_types; the taint pass only
+        // needs the type to look up struct field decorators.
+        let mut tys: HashMap<String, TypeInfo> = HashMap::new();
+        for param in &def.params {
+            let level = self
+                .taint_from_decorators(&param.decorators, &param.name.node)
+                .unwrap_or(TaintLevel::Unknown);
+            env.insert(param.name.node.clone(), level);
+            tys.insert(param.name.node.clone(), TypeInfo::from_ast_type(&param.ty));
+        }
+
+        for stmt in &def.body.stmts {
+            if !self.should_continue() {
+                break;
+            }
+            self.walk_stmt_taint(stmt, &mut env, &mut tys, profiles, field_taints);
+        }
+    }
+
+    fn walk_stmt_taint(
+        &mut self,
+        stmt: &Stmt,
+        env: &mut HashMap<String, TaintLevel>,
+        tys: &mut HashMap<String, TypeInfo>,
+        profiles: &HashMap<String, LlmFnTaintProfile>,
+        field_taints: &HashMap<(String, String), TaintLevel>,
+    ) {
+        match stmt {
+            Stmt::Let { name, value, .. } => {
+                self.check_call_taint(value, env, tys, profiles, field_taints);
+                let level = self.taint_of_expr(value, env, tys, profiles, field_taints);
+                env.insert(name.node.clone(), level);
+                tys.insert(
+                    name.node.clone(),
+                    self.taint_type_of_expr(value, tys, field_taints),
+                );
+            }
+            Stmt::Return { value: Some(expr), .. } => {
+                self.check_call_taint(expr, env, tys, profiles, field_taints);
+            }
+            Stmt::Expr { expr, .. } => {
+                self.check_call_taint(expr, env, tys, profiles, field_taints);
+            }
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.check_call_taint(condition, env, tys, profiles, field_taints);
+
+                // Branch join: snapshot env, walk then, save, restore, walk
+                // else, then for each name written in either branch, set
+                // env[name] = join(then, else_or_pre).
+                let pre = env.clone();
+                for s in &then_block.stmts {
+                    if !self.should_continue() {
+                        break;
+                    }
+                    self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                }
+                let then_env = std::mem::replace(env, pre.clone());
+
+                if let Some(else_block) = else_block {
+                    for s in &else_block.stmts {
+                        if !self.should_continue() {
+                            break;
+                        }
+                        self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                    }
+                }
+                // env now holds else_env (or pre if no else block).
+                // Merge: for any name in then_env, join with env[name] (or pre).
+                let mut merged: HashMap<String, TaintLevel> = HashMap::new();
+                for (k, v) in &pre {
+                    merged.insert(k.clone(), *v);
+                }
+                for (k, v) in &then_env {
+                    let other = env.get(k).copied().unwrap_or(TaintLevel::Unknown);
+                    merged.insert(k.clone(), v.join(other));
+                }
+                for (k, v) in env.iter() {
+                    if !merged.contains_key(k) {
+                        let other = then_env.get(k).copied().unwrap_or(TaintLevel::Unknown);
+                        merged.insert(k.clone(), v.join(other));
+                    }
+                }
+                *env = merged;
+            }
+            Stmt::For { body, iter, .. } => {
+                self.check_call_taint(iter, env, tys, profiles, field_taints);
+                for s in &body.stmts {
+                    if !self.should_continue() {
+                        break;
+                    }
+                    self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                }
+            }
+            Stmt::While { condition, body, .. } => {
+                self.check_call_taint(condition, env, tys, profiles, field_taints);
+                for s in &body.stmts {
+                    if !self.should_continue() {
+                        break;
+                    }
+                    self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                }
+            }
+            Stmt::Try { body, catches, .. } => {
+                for s in &body.stmts {
+                    if !self.should_continue() {
+                        break;
+                    }
+                    self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                }
+                for catch in catches {
+                    for s in &catch.body.stmts {
+                        if !self.should_continue() {
+                            break;
+                        }
+                        self.walk_stmt_taint(s, env, tys, profiles, field_taints);
+                    }
+                }
+            }
+            Stmt::Assert { condition, .. } => {
+                self.check_call_taint(condition, env, tys, profiles, field_taints);
+            }
+            Stmt::Return { value: None, .. } => {}
+        }
+    }
+
+    /// Compute the taint level of an expression in the given env. Calls
+    /// to `sanitize(x)` always return `Trusted`. Calls to other functions
+    /// return the join of arg taints (conservative). Field accesses
+    /// inherit the field's declared decorator taint when present, else
+    /// the object's taint.
+    fn taint_of_expr(
+        &mut self,
+        expr: &Expr,
+        env: &HashMap<String, TaintLevel>,
+        tys: &HashMap<String, TypeInfo>,
+        profiles: &HashMap<String, LlmFnTaintProfile>,
+        field_taints: &HashMap<(String, String), TaintLevel>,
+    ) -> TaintLevel {
+        match expr {
+            Expr::Literal { .. } | Expr::EnumVariant { .. } => TaintLevel::Unknown,
+            Expr::Ident { name, .. } => env.get(name).copied().unwrap_or(TaintLevel::Unknown),
+            Expr::Paren { expr, .. } => self.taint_of_expr(expr, env, tys, profiles, field_taints),
+            Expr::Unary { operand, .. } => {
+                self.taint_of_expr(operand, env, tys, profiles, field_taints)
+            }
+            Expr::Binary { left, right, .. } => self
+                .taint_of_expr(left, env, tys, profiles, field_taints)
+                .join(self.taint_of_expr(right, env, tys, profiles, field_taints)),
+            Expr::Index { object, index, .. } => self
+                .taint_of_expr(object, env, tys, profiles, field_taints)
+                .join(self.taint_of_expr(index, env, tys, profiles, field_taints)),
+            Expr::Await { expr, .. } => {
+                self.taint_of_expr(expr, env, tys, profiles, field_taints)
+            }
+            Expr::FieldAccess { object, field, .. } => {
+                let obj_taint = self.taint_of_expr(object, env, tys, profiles, field_taints);
+                // Resolve the object's type to find a declared field taint.
+                let ty = self.taint_type_of_expr(object, tys, field_taints);
+                if let TypeInfo::Named(type_name) = ty {
+                    if let Some(level) = field_taints.get(&(type_name, field.node.clone())) {
+                        return *level;
+                    }
+                }
+                obj_taint
+            }
+            Expr::Call { func, args, .. } => {
+                let fn_name = match func.as_ref() {
+                    Expr::Ident { name, .. } => name.clone(),
+                    _ => return TaintLevel::Unknown,
+                };
+                if fn_name == "sanitize" {
+                    return TaintLevel::Trusted;
+                }
+                let mut joined = TaintLevel::Unknown;
+                for arg in args {
+                    joined = joined.join(self.taint_of_expr(arg, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                let mut joined = self.taint_of_expr(receiver, env, tys, profiles, field_taints);
+                for arg in args {
+                    joined = joined.join(self.taint_of_expr(arg, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+            Expr::List { elements, .. } => {
+                let mut joined = TaintLevel::Unknown;
+                for e in elements {
+                    joined = joined.join(self.taint_of_expr(e, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+            Expr::Map { entries, .. } => {
+                let mut joined = TaintLevel::Unknown;
+                for e in entries {
+                    joined = joined.join(self.taint_of_expr(&e.key, env, tys, profiles, field_taints));
+                    joined = joined.join(self.taint_of_expr(&e.value, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+            Expr::StructLiteral { fields, .. } => {
+                let mut joined = TaintLevel::Unknown;
+                for fi in fields {
+                    joined = joined.join(self.taint_of_expr(&fi.value, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+            Expr::Match { expr, arms, .. } => {
+                let mut joined = self.taint_of_expr(expr, env, tys, profiles, field_taints);
+                for arm in arms {
+                    joined = joined.join(self.taint_of_expr(&arm.body, env, tys, profiles, field_taints));
+                }
+                joined
+            }
+        }
+    }
+
+    /// Best-effort type lookup used by taint to find struct/context types
+    /// for field-access decorator resolution. Falls back to `Unknown`.
+    fn taint_type_of_expr(
+        &self,
+        expr: &Expr,
+        tys: &HashMap<String, TypeInfo>,
+        _field_taints: &HashMap<(String, String), TaintLevel>,
+    ) -> TypeInfo {
+        match expr {
+            Expr::Ident { name, .. } => tys.get(name).cloned().unwrap_or(TypeInfo::Unknown),
+            Expr::Paren { expr, .. } => self.taint_type_of_expr(expr, tys, _field_taints),
+            Expr::FieldAccess { object, field, .. } => {
+                let obj_ty = self.taint_type_of_expr(object, tys, _field_taints);
+                if let TypeInfo::Named(type_name) = obj_ty {
+                    if let Some(sym) = self.context.symbols.lookup(&type_name) {
+                        let fields_opt: Option<&Vec<(String, TypeInfo)>> = match &sym.kind {
+                            SymbolKind::Struct { fields } => Some(fields),
+                            SymbolKind::Context { fields } => Some(fields),
+                            _ => None,
+                        };
+                        if let Some(fields) = fields_opt {
+                            for (fname, fty) in fields {
+                                if fname == &field.node {
+                                    return fty.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+                TypeInfo::Unknown
+            }
+            _ => TypeInfo::Unknown,
+        }
+    }
+
+    /// Walk an expression looking for direct call sites to llm fns and
+    /// emit `TaintViolation` for any untrusted argument that is bound to
+    /// a parameter the callee references in a prompt template. Recurses
+    /// into sub-expressions so nested calls are checked too.
+    fn check_call_taint(
+        &mut self,
+        expr: &Expr,
+        env: &HashMap<String, TaintLevel>,
+        tys: &HashMap<String, TypeInfo>,
+        profiles: &HashMap<String, LlmFnTaintProfile>,
+        field_taints: &HashMap<(String, String), TaintLevel>,
+    ) {
+        match expr {
+            Expr::Call { func, args, span } => {
+                if let Expr::Ident { name: fn_name, .. } = func.as_ref() {
+                    // Resolve the callee. We only enforce taint at llm fn
+                    // call sites; regular fn / flow calls are conservative
+                    // (their result-taint is the join of arg taints, but
+                    // they do not themselves require sanitization).
+                    let promptable_params: Option<HashSet<String>> = profiles
+                        .get(fn_name)
+                        .map(|p| p.promptable_params.clone());
+
+                    if let Some(promptable_params) = promptable_params {
+                        // Look up the llm fn's param order to map positional
+                        // args to param names. `LlmFnInfo.params` is in
+                        // declaration order.
+                        let param_names: Vec<String> = self
+                            .context
+                            .llm_functions
+                            .get(fn_name)
+                            .map(|i| i.params.iter().map(|(n, _)| n.clone()).collect())
+                            .unwrap_or_default();
+
+                        for (idx, arg) in args.iter().enumerate() {
+                            let arg_taint =
+                                self.taint_of_expr(arg, env, tys, profiles, field_taints);
+                            if arg_taint != TaintLevel::Untrusted {
+                                continue;
+                            }
+                            let param_name = match param_names.get(idx) {
+                                Some(n) => n,
+                                None => continue,
+                            };
+                            if promptable_params.contains(param_name) {
+                                let (line, col) = self.line_col(arg.span());
+                                self.add_error(SemanticError::TaintViolation {
+                                    origin: describe_taint_origin(arg),
+                                    llm_fn_name: fn_name.clone(),
+                                    span: arg.span().clone(),
+                                    line,
+                                    column: col,
+                                });
+                                if !self.should_continue() {
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    // Recurse into arg sub-expressions so nested calls are
+                    // also checked.
+                    let _ = span;
+                    for arg in args {
+                        self.check_call_taint(arg, env, tys, profiles, field_taints);
+                    }
+                } else {
+                    for arg in args {
+                        self.check_call_taint(arg, env, tys, profiles, field_taints);
+                    }
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                self.check_call_taint(receiver, env, tys, profiles, field_taints);
+                for arg in args {
+                    self.check_call_taint(arg, env, tys, profiles, field_taints);
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.check_call_taint(left, env, tys, profiles, field_taints);
+                self.check_call_taint(right, env, tys, profiles, field_taints);
+            }
+            Expr::Unary { operand, .. } => {
+                self.check_call_taint(operand, env, tys, profiles, field_taints);
+            }
+            Expr::Paren { expr, .. } => {
+                self.check_call_taint(expr, env, tys, profiles, field_taints);
+            }
+            Expr::Index { object, index, .. } => {
+                self.check_call_taint(object, env, tys, profiles, field_taints);
+                self.check_call_taint(index, env, tys, profiles, field_taints);
+            }
+            Expr::FieldAccess { object, .. } => {
+                self.check_call_taint(object, env, tys, profiles, field_taints);
+            }
+            Expr::Await { expr, .. } => {
+                self.check_call_taint(expr, env, tys, profiles, field_taints);
+            }
+            Expr::List { elements, .. } => {
+                for e in elements {
+                    self.check_call_taint(e, env, tys, profiles, field_taints);
+                }
+            }
+            Expr::Map { entries, .. } => {
+                for e in entries {
+                    self.check_call_taint(&e.key, env, tys, profiles, field_taints);
+                    self.check_call_taint(&e.value, env, tys, profiles, field_taints);
+                }
+            }
+            Expr::StructLiteral { fields, .. } => {
+                for fi in fields {
+                    self.check_call_taint(&fi.value, env, tys, profiles, field_taints);
+                }
+            }
+            Expr::Match { expr, arms, .. } => {
+                self.check_call_taint(expr, env, tys, profiles, field_taints);
+                for arm in arms {
+                    self.check_call_taint(&arm.body, env, tys, profiles, field_taints);
+                }
+            }
+            Expr::Literal { .. } | Expr::Ident { .. } | Expr::EnumVariant { .. } => {}
+        }
+    }
+}
+
+/// Describe the source of taint for a TaintViolation message. Best-effort:
+/// for an identifier we name it; for a struct field access we say which
+/// field; otherwise we fall back to "<expression>".
+fn describe_taint_origin(expr: &Expr) -> String {
+    match expr {
+        Expr::Ident { name, .. } => format!("`{}`", name),
+        Expr::FieldAccess { object, field, .. } => match object.as_ref() {
+            Expr::Ident { name, .. } => format!("field `{}.{}`", name, field.node),
+            _ => format!("field `{}`", field.node),
+        },
+        Expr::Paren { expr, .. } => describe_taint_origin(expr),
+        _ => "<expression>".to_string(),
     }
 }
 
@@ -2214,5 +2968,574 @@ mod tests {
 
         let suggestion = suggest_similar("xyz", &candidates, 3);
         assert!(suggestion.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // Built-in registration (sanitize)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_sanitize_builtin_registered_in_global_scope() {
+        let analyzer = SemanticAnalyzer::new();
+        let sym = analyzer
+            .context
+            .symbols
+            .lookup("sanitize")
+            .expect("sanitize must be pre-registered");
+        assert!(matches!(
+            sym.kind,
+            SymbolKind::Builtin {
+                kind: BuiltinKind::Sanitize
+            }
+        ));
+    }
+
+    #[test]
+    fn test_sanitize_call_passes_with_one_arg() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(input: string) -> string {
+                let cleaned = sanitize(input);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        let result = analyze(source);
+        assert!(
+            result.is_ok(),
+            "expected sanitize() to type-check; got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_sanitize_wrong_arity_reports_error() {
+        let source = r#"
+            flow run(input: string) -> string {
+                let bad = sanitize(input, input);
+                return bad;
+            }
+        "#;
+        let errs = analyze(source).expect_err("sanitize requires exactly 1 arg");
+        assert!(
+            errs.iter().any(|e| matches!(
+                e,
+                SemanticError::ArgumentCountMismatch { fn_name, expected: 1, found: 2, .. }
+                    if fn_name == "sanitize"
+            )),
+            "expected ArgumentCountMismatch on sanitize, got: {:?}",
+            errs
+        );
+    }
+
+    #[test]
+    fn test_user_function_named_sanitize_reports_shadowing() {
+        let source = r#"
+            fn sanitize(x: string) -> string {
+                return x;
+            }
+        "#;
+        let errs = analyze(source).expect_err("user-defined sanitize must be rejected");
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::SanitizeShadowed { .. })),
+            "expected SanitizeShadowed, got: {:?}",
+            errs
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 6: Taint analysis — smoke tests
+    // (A6 will add the full 20+ test matrix; these exist so each step
+    // carries its own evidence per rule 4.)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_taint_pass_clean_when_arg_sanitized_at_call_site() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(@untrusted input: string) -> string {
+                let cleaned = sanitize(input);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        let result = analyze(source);
+        assert!(
+            result.is_ok(),
+            "sanitized untrusted should pass; got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_taint_pass_rejects_untrusted_arg_at_llm_fn_call() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(@untrusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        let errs = analyze(source).expect_err("untrusted arg should violate");
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::TaintViolation { llm_fn_name, .. } if llm_fn_name == "echo")),
+            "expected TaintViolation on echo, got: {:?}",
+            errs
+        );
+    }
+
+    #[test]
+    fn test_skip_taint_pass_option_disables_pass_6() {
+        // Same source as the negative test above. With the taint pass
+        // disabled the program must compile clean — this is the ablation
+        // control used by the security benchmark.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(@untrusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        let program = Parser::new(source).unwrap().parse_program().unwrap();
+        let result = SemanticAnalyzer::with_source(source).analyze_with_options(
+            &program,
+            SemanticOptions {
+                skip_taint_pass: true,
+            },
+        );
+        assert!(
+            result.is_ok(),
+            "skip_taint_pass=true must allow the same program through; got: {:?}",
+            result.err()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 6: Taint analysis — full matrix
+    // -------------------------------------------------------------------------
+    //
+    // Per the task plan: at least 7 positive (taint-clean), at least 8
+    // negative (must fire TaintViolation), and at least 5 tricky/edge
+    // cases. Combined with the smoke tests above, the taint suite should
+    // hit 20+.
+
+    fn count_taint_violations(errs: &[SemanticError]) -> usize {
+        errs.iter()
+            .filter(|e| matches!(e, SemanticError::TaintViolation { .. }))
+            .count()
+    }
+
+    fn assert_clean(source: &str) {
+        let result = analyze(source);
+        assert!(
+            result.is_ok(),
+            "expected clean analyze; got errors: {:?}",
+            result.err()
+        );
+    }
+
+    fn assert_taint_violations(source: &str, expected: usize) {
+        let errs = analyze(source).expect_err("expected taint violations");
+        let actual = count_taint_violations(&errs);
+        assert_eq!(
+            actual, expected,
+            "expected exactly {expected} taint violations; got {actual}. all errors: {:?}",
+            errs
+        );
+    }
+
+    // ---- Positive cases ------------------------------------------------
+
+    #[test]
+    fn test_taint_positive_no_annotations_anywhere() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_trusted_param_into_prompt() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@trusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_untrusted_then_through_fn_then_sanitize() {
+        // `redact` returns join-of-arg-taints (Untrusted). The flow then
+        // sanitizes before calling the llm fn. Result must be clean.
+        let source = r#"
+            fn redact(s: string) -> string {
+                return s;
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let raw = redact(input);
+                let cleaned = sanitize(raw);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_sanitize_result_reused_multiple_times() {
+        let source = r#"
+            llm fn first(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            llm fn second(y: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{y}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let cleaned = sanitize(input);
+                let a = first(cleaned);
+                let b = second(cleaned);
+                return b;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_nested_sanitize() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let out = echo(sanitize(sanitize(input)));
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_untrusted_via_field_then_sanitize() {
+        let source = r#"
+            struct Request {
+                @untrusted user_text: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let cleaned = sanitize(req.user_text);
+                let out = echo(cleaned);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_positive_unmarked_field_is_unknown() {
+        // Field has no decorators -> Unknown -> not a violation.
+        let source = r#"
+            struct Request {
+                payload: string
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let out = echo(req.payload);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    // ---- Negative cases ------------------------------------------------
+
+    #[test]
+    fn test_taint_negative_untrusted_param_directly_in_prompt() {
+        // The llm fn's own `@untrusted` parameter is referenced in its
+        // prompt template. Violation reported at the param site, not at
+        // the call site.
+        let source = r#"
+            llm fn bad(@untrusted q: string) -> string {
+                model: "gpt-4o",
+                prompt: "Answer: {{q}}"
+            }
+            flow run(input: string) -> string {
+                let out = bad(input);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_let_then_prompt() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let x = input;
+                let out = echo(x);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_struct_field_into_prompt() {
+        let source = r#"
+            struct Request {
+                @untrusted user_text: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(req: Request) -> string {
+                let out = echo(req.user_text);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_through_regular_fn_into_prompt() {
+        // Regular fn returns join-of-arg-taints; here it propagates
+        // Untrusted to the prompt without sanitization.
+        let source = r#"
+            fn passthrough(s: string) -> string {
+                return s;
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string) -> string {
+                let y = passthrough(input);
+                let out = echo(y);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_two_untrusted_params_used_in_prompt() {
+        // Both params are `@untrusted` and both are referenced in the
+        // prompt. Pass 6 should report a violation per param (2 total).
+        let source = r#"
+            llm fn join(@untrusted a: string, @untrusted b: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{a}} / {{b}}"
+            }
+        "#;
+        assert_taint_violations(source, 2);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_in_else_branch() {
+        // The else branch routes untrusted into the prompt while the
+        // then branch sanitizes. The else-branch's call site is the
+        // violation regardless of branch reachability.
+        //
+        // Note: the condition is parenthesized so the parser does not
+        // mistake `flag {` for a struct-literal opening brace.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted input: string, flag: bool) -> string {
+                if (flag) {
+                    let cleaned = sanitize(input);
+                    let a = echo(cleaned);
+                } else {
+                    let b = echo(input);
+                }
+                return "done";
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_sanitize_applied_to_wrong_arg() {
+        // sanitize is called but on a different value than the one that
+        // reaches the prompt. The prompt path is still tainted.
+        let source = r#"
+            llm fn join(a: string, b: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{a}} / {{b}}"
+            }
+            flow run(@untrusted bad: string, good: string) -> string {
+                let cleaned_good = sanitize(good);
+                let out = join(bad, cleaned_good);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    #[test]
+    fn test_taint_negative_untrusted_via_context_field_into_prompt() {
+        let source = r#"
+            context Session {
+                @untrusted last_user_msg: string,
+                user_id: int
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(session: Session) -> string {
+                let out = echo(session.last_user_msg);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
+    }
+
+    // ---- Tricky / edge cases ------------------------------------------
+
+    #[test]
+    fn test_taint_edge_conflicting_decorators_on_param() {
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@trusted @untrusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        let errs = analyze(source).expect_err("conflicting decorators must error");
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::ConflictingTaintDecorators { name, .. } if name == "input")),
+            "expected ConflictingTaintDecorators on input, got: {:?}",
+            errs
+        );
+    }
+
+    #[test]
+    fn test_taint_edge_unknown_decorator_silently_ignored() {
+        // Unknown decorators are silently ignored to match existing
+        // decorator handling in the parser. The program must compile
+        // clean even though the user might have intended `@untrusted`.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted_typo input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_sanitize_recovers_after_join() {
+        // Even when an intermediate binding inherits Untrusted via join,
+        // wrapping the final result in sanitize makes it Trusted.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(@untrusted a: string, @trusted b: string) -> string {
+                let mixed = a;
+                let out = echo(sanitize(mixed));
+                return out;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_fn_call_to_non_llm_is_not_a_violation_site() {
+        // Calling a regular fn with untrusted input is not by itself a
+        // violation — only when the result reaches an llm fn prompt.
+        let source = r#"
+            fn store(s: string) -> string {
+                return s;
+            }
+            flow run(@untrusted input: string) -> string {
+                let _ = store(input);
+                return input;
+            }
+        "#;
+        assert_clean(source);
+    }
+
+    #[test]
+    fn test_taint_edge_nested_field_access_inherits_field_taint() {
+        // FieldAccess on a struct whose field is `@untrusted` produces
+        // an Untrusted value even when the surrounding struct-typed
+        // variable has no decorator of its own.
+        let source = r#"
+            struct Inner {
+                @untrusted secret: string
+            }
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+            flow run(inner: Inner) -> string {
+                let out = echo(inner.secret);
+                return out;
+            }
+        "#;
+        assert_taint_violations(source, 1);
     }
 }

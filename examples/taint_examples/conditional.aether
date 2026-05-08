@@ -1,0 +1,26 @@
+// Conditional flow where one branch sanitizes and the other doesn't.
+// Pass 6 reports the violation at the call site in the unsafe branch
+// (the else block here): `input` is `@untrusted` and reaches the
+// prompt through `classify(input)` with no `sanitize(...)` in
+// between.
+//
+// The condition is parenthesized because Aether currently parses
+// `ident {` as the start of a struct literal.
+//
+// Expected: `aetherc check examples/taint_examples/conditional.aether`
+//   produces 1 TaintViolation and exits non-zero.
+
+llm fn classify(text: string) -> string {
+    model: "gpt-4o-mini",
+    prompt: "Classify: {{text}}"
+}
+
+flow run(@untrusted input: string, mode: int) -> string {
+    if (mode == 1) {
+        let cleaned = sanitize(input);
+        let safe_label = classify(cleaned);
+    } else {
+        let unsafe_label = classify(input);
+    }
+    return "done";
+}

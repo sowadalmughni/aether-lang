@@ -24,3 +24,18 @@ datasets>=2.20,<4.0
 numpy>=1.26,<3.0
 scipy>=1.13,<2.0
 httpx>=0.27,<1.0
+
+# bench/security — direct prompt-injection benchmark.
+#
+# Uses attack content adapted from InjecAgent
+# (https://github.com/uiuc-kang-lab/InjecAgent), used under that
+# project's license. We do NOT depend on the InjecAgent Python
+# package: their harness is for tool-using agents and does not align
+# with Aether's prompt-level taint model. Instead we vendor a JSON
+# subset of their test cases under bench/security/data/ and reuse
+# only the attacker-instruction strings + expected-achievement
+# descriptors in a direct-prompt-injection harness.
+#
+# Pinned to match the existing langchain/dspy artifact-evaluation
+# tradition.
+openai==1.55.0

@@ -67,6 +67,15 @@ enum Commands {
         /// Input Aether source file
         #[arg(value_name = "FILE")]
         input: PathBuf,
+
+        /// Skip the compile-time taint analysis pass (Pass 6).
+        ///
+        /// Used by the security benchmark's ablation control: running the
+        /// same Aether toolchain with and without the taint pass isolates
+        /// the contribution of taint tracking to attack-success-rate
+        /// reductions. Production users should not enable this flag.
+        #[arg(long)]
+        no_taint_check: bool,
     },
 
     /// Parse Aether source and output AST as JSON
@@ -114,7 +123,10 @@ fn main() -> Result<()> {
             flow,
             all,
         } => cmd_compile(input, output, flow, all),
-        Commands::Check { input } => cmd_check(input),
+        Commands::Check {
+            input,
+            no_taint_check,
+        } => cmd_check(input, no_taint_check),
         Commands::Parse { input, pretty } => cmd_parse(input, pretty),
         Commands::Run {
             input,
@@ -219,7 +231,7 @@ fn cmd_compile(
     Ok(())
 }
 
-fn cmd_check(input: PathBuf) -> Result<()> {
+fn cmd_check(input: PathBuf, no_taint_check: bool) -> Result<()> {
     let source = fs::read_to_string(&input)
         .into_diagnostic()
         .map_err(|e| miette!("Failed to read {}: {}", input.display(), e))?;
@@ -230,8 +242,12 @@ fn cmd_check(input: PathBuf) -> Result<()> {
         .parse_program()
         .map_err(|e| miette!("Parse error: {:?}", e))?;
 
-    // Semantic analysis
-    let ctx = SemanticAnalyzer::new().analyze(&program);
+    // Semantic analysis. Use with_source so error messages report
+    // correct line/column numbers instead of raw byte offsets.
+    let options = aether_compiler::semantic::SemanticOptions {
+        skip_taint_pass: no_taint_check,
+    };
+    let ctx = SemanticAnalyzer::with_source(&source).analyze_with_options(&program, options);
 
     match ctx {
         Ok(ctx) => {

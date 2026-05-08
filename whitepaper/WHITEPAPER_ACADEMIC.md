@@ -757,19 +757,25 @@ Lines of code comparison for equivalent functionality:
 
 ### 9.5 Type Safety Analysis (H1)
 
-Error detection comparison on intentionally malformed test cases:
+Error detection comparison on a 30-case corpus of intentionally malformed programs split across four buckets. For each case, an `aetherc check` is run on the `.aether` source and a `python` is run on the LangChain and DSPy equivalents; results are classified by stderr pattern (Aether) or by exit code + traceback class (Python). Source: `bench/results/ablation_typesafety_v1.json`, `summary.by_bucket` and `summary` blocks. Companion Markdown: [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md).
 
-| Error Category | Total Test Cases | Aether Compile-Time | Aether Runtime | LangChain Runtime | Raw API Runtime |
-|----------------|------------------|---------------------|----------------|-------------------|-----------------|
-| Schema mismatch | 15 | 15 | 0 | 0 | 0 |
-| Missing field | 12 | 12 | 0 | 0 | 0 |
-| Type coercion failure | 10 | 10 | 0 | 0 | 0 |
-| Undefined reference | 13 | 13 | N/A | 0 | 0 |
-| **Total** | 50 | 50 | 0 | 0 | 0 |
+| Bucket | Total | Aether (compile-time) | LangChain (runtime) | LangChain (missed silently) | DSPy (runtime) | DSPy (missed silently) |
+|---|---:|---:|---:|---:|---:|---:|
+| `type_mismatch` | 10 | 10 | 0 | 10 | 0 | 10 |
+| `undefined_reference` | 10 | 10 | 10 | 0 | 10 | 0 |
+| `missing_field` | 5 | 5 | 5 | 0 | 5 | 0 |
+| `duplicate_definition` | 5 | 5 | 2 | 3 | 2 | 3 |
+| **Total** | **30** | **30** | **17** | **13** | **17** | **13** |
 
-**Compile-time detection rate (SC-1)**: 100% of errors detectable by Aether compiler before execution.
+Source per row: `summary.by_bucket.<bucket>.{total, aether_caught, lc_caught_at_runtime, dspy_caught_at_runtime}`. Aether's per-bucket missed-silently count is 0 in all buckets (`summary.aether_missed = 0`); LangChain and DSPy missed-silently counts are computed as `total - caught_at_runtime` per bucket and cross-checked against `summary.lc_missed_silently=13`, `summary.dspy_missed_silently=13`.
 
-**Methodology**: Test suite includes 50 intentionally incorrect programs covering each error category. Each program is compiled with Aether and executed with baseline implementations. Errors are categorized by where they are detected.
+**Compile-time detection rate**: **30/30 = 100.00%** for Aether (`summary.aether_caught=30`, `summary.aether_missed=0`). The 13 cases LangChain/DSPy miss silently exit code 0 with a plausible-looking output — the most dangerous failure mode in production, because it produces output that looks valid.
+
+**Methodology.** `aetherc check <file>` exit-coded by stderr pattern: exit 0 → missed; exit ≠ 0 with a known `SemanticError` variant pattern → `caught_at_compile_time`. `python <file>` with a 30 s timeout: exit 0 → `missed_silently`; exit ≠ 0 with a Python traceback → `caught_at_runtime` (this includes `SyntaxError` at file load and Enum class-body errors). The `error_class_matched` and `exception_class` fields are recorded per case in `test_cases[*]` and reproduced in [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md).
+
+**Methodology note (cd → dd substitution).** *Verbatim from `ablation_typesafety_v1.json` `methodology_notes.cd_substitution`*:
+
+> The original ablation design included a `circular_dependency` category, but verification revealed that aetherc's source-level cd detector is currently preempted by semantic analysis on programs that contain other issues; the `SemanticError::CircularDependency` variant is defined but never emitted. Rather than fabricate test cases that would not trigger the intended error path, we substituted `duplicate_definition` tests, which exercise a different but more practically significant error class (silent shadowing in Python is more dangerous than a circular dependency, which typically manifests as `RecursionError` or `ImportError` — loud and visible). The cd detection gap is tracked at https://github.com/sowadalmughni/aether-lang/issues/4 and is targeted for a follow-up compiler release.
 
 ### 9.6 Case Study: Customer Support Triage
 

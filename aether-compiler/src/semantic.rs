@@ -3097,4 +3097,34 @@ mod tests {
             errs
         );
     }
+
+    #[test]
+    fn test_skip_taint_pass_option_disables_pass_6() {
+        // Same source as the negative test above. With the taint pass
+        // disabled the program must compile clean — this is the ablation
+        // control used by the security benchmark.
+        let source = r#"
+            llm fn echo(x: string) -> string {
+                model: "gpt-4o",
+                prompt: "{{x}}"
+            }
+
+            flow run(@untrusted input: string) -> string {
+                let out = echo(input);
+                return out;
+            }
+        "#;
+        let program = Parser::new(source).unwrap().parse_program().unwrap();
+        let result = SemanticAnalyzer::with_source(source).analyze_with_options(
+            &program,
+            SemanticOptions {
+                skip_taint_pass: true,
+            },
+        );
+        assert!(
+            result.is_ok(),
+            "skip_taint_pass=true must allow the same program through; got: {:?}",
+            result.err()
+        );
+    }
 }

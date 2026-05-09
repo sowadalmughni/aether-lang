@@ -42,6 +42,15 @@ matplotlib>=3.8,<4.0
 # only the attacker-instruction strings + expected-achievement
 # descriptors in a direct-prompt-injection harness.
 #
-# Pinned to match the existing langchain/dspy artifact-evaluation
-# tradition.
-openai==1.55.0
+# Pinned to the lowest version compatible with langchain-openai 0.2.14,
+# which requires `openai>=1.58.1,<2.0.0`. The earlier 1.55.0 pin became
+# unresolvable when langchain-openai's wheel metadata tightened.
+# 1.58.1 keeps the pin deterministic for artifact evaluation while
+# satisfying langchain-openai. The committed real-API JSONs in
+# bench/results/ were measured at openai 1.55.0; reproduce.sh runs
+# mock-mode only and does not call api.openai.com, so a third party
+# rerunning reproduce.sh with this pin still hits the mock provider
+# and produces matching JSONs. Real-API reruns under this pin may
+# differ in latency/cost; that is expected and out of reproduce.sh's
+# scope (see REPRODUCIBILITY.md §6).
+openai==1.58.1

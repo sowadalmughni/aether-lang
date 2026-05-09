@@ -1,39 +1,31 @@
-# Baseline Benchmark Stubs
+# Baseline Benchmarks (LangChain & DSPy)
 
-This directory contains baseline benchmark scripts for comparing Aether runtime
-performance against traditional LLM orchestration approaches.
-
-## Overview
-
-These scripts are **scaffolding baselines** - they implement the same benchmark
-report schema as Aether benchmarks to enable direct comparison. In mock mode,
-they use deterministic simulated responses instead of real LLM API calls.
+These are the LangChain and DSPy baselines that produce the comparison
+numbers in [`bench/results/langchain_v1.json`](../results/langchain_v1.json),
+[`bench/results/dspy_v1.json`](../results/dspy_v1.json), and their real-API
+counterparts. They use real `langchain` 0.3.28 (`langchain-core` 0.3.84)
+and real `dspy` 2.6.27 — both pinned in [`bench/requirements.txt`](../requirements.txt).
+They are not simulations.
 
 ## Scripts
 
 ### langchain_baseline.py
 
-Simulates a LangChain-style pipeline with:
-- Sequential prompt execution
-- Manual caching (opt-in, low hit rate)
-- JSON parsing at runtime (error-prone)
+LCEL chain (`Runnable | Runnable | …`) with optional `RunnableParallel`
+for explicit parallel branches and `langchain.cache.InMemoryCache`
+(LRU exact-match) for caching.
 
 ### dspy_baseline.py
 
-Simulates a DSPy-style pipeline with:
-- Program-based composition
-- Automatic prompt optimization (simulated)
-- Module-based structure
+DSPy `Module` composition using real `Signature`, `Predict`,
+`ChainOfThought`, and `ChatAdapter` symbols. No automatic caching.
 
 ## Usage
 
-### Mock Mode (default - no API keys required)
+### Mock Mode (default — no API keys required)
 
 ```bash
-# Run LangChain baseline
 python bench/baselines/langchain_baseline.py
-
-# Run DSPy baseline  
 python bench/baselines/dspy_baseline.py
 ```
 
@@ -76,19 +68,16 @@ Both scripts output JSON matching the Aether benchmark report format:
 
 ## Comparison with Aether
 
-These baselines represent the **projected baseline performance** from Section 8
-of the Aether whitepaper. Key differences from Aether:
-
 | Aspect | LangChain Baseline | DSPy Baseline | Aether |
 |--------|-------------------|---------------|--------|
-| Execution | Sequential | Sequential | Parallel DAG |
-| Caching | Manual, low hit rate | None | Automatic, multi-level |
-| Type Safety | Runtime JSON errors | Runtime errors | Compile-time checks |
-| Parallelization | None | Limited | Automatic from DAG |
+| Execution | LCEL chains, optionally `RunnableParallel` | DSPy `Module` + `Predict` (sequential) | Level-parallel DAG |
+| Caching | `langchain.cache.InMemoryCache` (LRU exact-match) | None | L1 exact-match (measured 0.7/1.0 hit rate, [ablation_cache_v1.json](../results/ablation_cache_v1.json)) |
+| Type Safety | Runtime parse errors (17/30 caught, [ablation_typesafety_v1.json](../results/ablation_typesafety_v1.json)) | Runtime parse errors (17/30 caught, same source) | Compile-time (30/30 caught, same source) |
+| Parallelization | Where authored via `RunnableParallel` | None in baseline | Automatic from DAG (1.4778×/2.5841×, [ablation_parallel_v1.json](../results/ablation_parallel_v1.json)) |
 
-## Notes
+## Result files
 
-- These are **stub implementations** for benchmark comparison purposes
-- They do not depend on actual LangChain or DSPy packages to minimize dependencies
-- The structure mimics typical usage patterns of those frameworks
-- Latency and token costs in mock mode are simulated based on prompt length
+- [`bench/results/langchain_v1.json`](../results/langchain_v1.json) — mock-mode LangChain run
+- [`bench/results/dspy_v1.json`](../results/dspy_v1.json) — mock-mode DSPy run
+- [`bench/results/langchain_real_api_v1.json`](../results/langchain_real_api_v1.json) — real-API counterpart
+- [`bench/results/dspy_real_api_v1.json`](../results/dspy_real_api_v1.json) — real-API counterpart

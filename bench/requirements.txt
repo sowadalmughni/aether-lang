@@ -25,6 +25,12 @@ numpy>=1.26,<3.0
 scipy>=1.13,<2.0
 httpx>=0.27,<1.0
 
+# bench/figures/generate_figures.py — produces the publication figures
+# in whitepaper/latex/figures/ from the JSONs in bench/results/. Pinned
+# loosely because matplotlib's bar-chart output is stable across patches
+# and the figures are visually inspected as part of the paper build.
+matplotlib>=3.8,<4.0
+
 # bench/security — direct prompt-injection benchmark.
 #
 # Uses attack content adapted from InjecAgent

@@ -1,0 +1,120 @@
+{
+  "figure": "cache_hit_rate",
+  "caption": "Cache hit rate by mode on the caching ablation. The unique-query workload (customer_support_100) demonstrates L1's null effect; the repeat-injected workload (customer_support_repeat_100) demonstrates L1 effectiveness. Bars whose 95% CI collapses to a single value (per_trial values identical across all 5 trials) are labeled '(degenerate CI)'. Source: ablation_cache_v1.json.",
+  "sources": [
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[0].cache_hit_rate.mean",
+      "dataset": "customer_support_100",
+      "config": "no_cache",
+      "field": "cache_hit_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[0].cache_hit_rate.ci95",
+      "dataset": "customer_support_100",
+      "config": "no_cache",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[1].cache_hit_rate.mean",
+      "dataset": "customer_support_100",
+      "config": "l1_exact_match",
+      "field": "cache_hit_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[1].cache_hit_rate.ci95",
+      "dataset": "customer_support_100",
+      "config": "l1_exact_match",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[2].cache_hit_rate.mean",
+      "dataset": "customer_support_100",
+      "config": "repeat_warm",
+      "field": "cache_hit_rate.mean",
+      "value": 1.0
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[2].cache_hit_rate.ci95",
+      "dataset": "customer_support_100",
+      "config": "repeat_warm",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[4].cache_hit_rate.mean",
+      "dataset": "customer_support_repeat_100",
+      "config": "no_cache",
+      "field": "cache_hit_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[4].cache_hit_rate.ci95",
+      "dataset": "customer_support_repeat_100",
+      "config": "no_cache",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[5].cache_hit_rate.mean",
+      "dataset": "customer_support_repeat_100",
+      "config": "l1_exact_match",
+      "field": "cache_hit_rate.mean",
+      "value": 0.7
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[5].cache_hit_rate.ci95",
+      "dataset": "customer_support_repeat_100",
+      "config": "l1_exact_match",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        0.7,
+        0.7
+      ]
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[6].cache_hit_rate.mean",
+      "dataset": "customer_support_repeat_100",
+      "config": "repeat_warm",
+      "field": "cache_hit_rate.mean",
+      "value": 1.0
+    },
+    {
+      "file": "ablation_cache_v1.json",
+      "json_path": "results[6].cache_hit_rate.ci95",
+      "dataset": "customer_support_repeat_100",
+      "config": "repeat_warm",
+      "field": "cache_hit_rate.ci95",
+      "value": [
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

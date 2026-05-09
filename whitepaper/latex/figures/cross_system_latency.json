@@ -1,0 +1,384 @@
+{
+  "figure": "cross_system_latency",
+  "caption": "Per-config p50 latency (ms) across systems on synthetic mock-LLM benchmarks. Error bars are 95% paired BCa intervals. n=5 trials per config. Source: aether_mock_v1.json, langchain_v1.json, dspy_v1.json.",
+  "sources": [
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[0].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 209.2
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[0].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        207.8,
+        211.0
+      ]
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[1].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 145.8
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[1].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        145.2,
+        146.6
+      ]
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[2].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 33.0
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[2].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        32.4,
+        33.6
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[0].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 165.02110999863362
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[0].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        160.27519999915967,
+        177.27785999886692
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[1].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 109.1185300014331
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[1].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        108.84313000133261,
+        109.58248000388267
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[2].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 4.654179998033214
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[2].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        4.1236599965486676,
+        5.149169999640435
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[0].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 155.5661299989879
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[0].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        155.45466999901691,
+        155.68214999912016
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[1].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 107.65618000004906
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[1].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        107.5887099992542,
+        107.70084000068891
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[2].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 0.800350000281469
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[2].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "customer_support_100",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        0.6903700006660074,
+        1.1253899996518157
+      ]
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[3].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 224.4
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[3].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        223.5,
+        225.4
+      ]
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[4].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 88.5
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[4].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        87.5,
+        89.4
+      ]
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[5].latency_p50_ms.mean",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 31.5
+    },
+    {
+      "file": "aether_mock_v1.json",
+      "json_path": "results[5].latency_p50_ms.ci95",
+      "system": "Aether",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        31.0,
+        32.1
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[3].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 157.59584000043105
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[3].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        157.1410900025512,
+        158.3647200022824
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[4].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 57.11662999819964
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[4].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        56.966699997428805,
+        57.42953999870224
+      ]
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[5].latency_p50_ms.mean",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 3.659249996417202
+    },
+    {
+      "file": "langchain_v1.json",
+      "json_path": "results[5].latency_p50_ms.ci95",
+      "system": "LangChain",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        3.4689899955992587,
+        3.9419999957317486
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[3].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 155.20602999931725
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[3].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        155.18175999932282,
+        155.2307699996163
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[4].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 57.23343999998178
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[4].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        57.06775999860838,
+        57.36408000084339
+      ]
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[5].latency_p50_ms.mean",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.mean",
+      "value": 0.9586000003764639
+    },
+    {
+      "file": "dspy_v1.json",
+      "json_path": "results[5].latency_p50_ms.ci95",
+      "system": "DSPy",
+      "dataset": "document_analysis_50",
+      "config": "parallel_cached",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        0.8792400003585499,
+        1.08219000067038
+      ]
+    }
+  ]
+}

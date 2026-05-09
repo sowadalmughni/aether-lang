@@ -1,0 +1,102 @@
+{
+  "figure": "security_outcome",
+  "caption": "Panel A: compile-time taint-tracking catch rate by configuration. Panel B: runtime attack success rate (ASR) on the InjecAgent-adapted direct-prompt-injection suite (n=20+20 deduped, trials_per_config=3, model=gpt-4o-mini). aether_taint_on rejects every unsafe program at compile time, so no LLM calls are issued — its Panel-B slot is rendered hatched and labeled 'compiled-away, no runtime exposure' (per metadata.completed_live_configs=['aether_taint_off', 'langchain_baseline']). aether_taint_off and langchain_baseline both show measured ASR=0.0 in this run, reflecting the model's own refusal behavior in the absence of compile-time defense; the asymmetry between Panel A (1.0 vs 0.0 vs 0.0) and Panel B (n/a vs 0.0 vs 0.0) is the headline finding. Source: security_v1.json.",
+  "sources": [
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[0].metrics[2].mean",
+      "config": "aether_taint_on",
+      "field": "compile_time_catch_rate.mean",
+      "value": 1.0
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[0].metrics[2].ci95",
+      "config": "aether_taint_on",
+      "field": "compile_time_catch_rate.ci95",
+      "value": [
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[1].metrics[2].mean",
+      "config": "aether_taint_off",
+      "field": "compile_time_catch_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[1].metrics[2].ci95",
+      "config": "aether_taint_off",
+      "field": "compile_time_catch_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[2].metrics[2].mean",
+      "config": "langchain_baseline",
+      "field": "compile_time_catch_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[2].metrics[2].ci95",
+      "config": "langchain_baseline",
+      "field": "compile_time_catch_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "metadata.completed_live_configs",
+      "config": "aether_taint_on",
+      "field": "completed_live_configs",
+      "value": [
+        "aether_taint_off",
+        "langchain_baseline"
+      ],
+      "note": "aether_taint_on omitted from live runs: every case has compiled=false, ran_llm=false; the panel-B slot is rendered as 'no runtime exposure'"
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[1].metrics[0].mean",
+      "config": "aether_taint_off",
+      "field": "attack_success_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[1].metrics[0].ci95",
+      "config": "aether_taint_off",
+      "field": "attack_success_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[2].metrics[0].mean",
+      "config": "langchain_baseline",
+      "field": "attack_success_rate.mean",
+      "value": 0.0
+    },
+    {
+      "file": "security_v1.json",
+      "json_path": "configs[2].metrics[0].ci95",
+      "config": "langchain_baseline",
+      "field": "attack_success_rate.ci95",
+      "value": [
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

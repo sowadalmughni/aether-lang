@@ -24,6 +24,7 @@ edits except those that don't change measurements) is preserved.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -144,6 +145,84 @@ def _is_typing_rule_block(body: str) -> bool:
     return ("Γ" in body) and ("⊢" in body) and ("─" in body)
 
 
+# ---------------------------------------------------------------------------
+# Figure injection.
+#
+# bench/figures/generate_figures.py writes vector PDFs + JSON sidecars into
+# whitepaper/latex/figures/. This preprocessor injects raw LaTeX figure
+# environments immediately after specific Section 9 headings; pandoc's
+# `raw_tex` extension (enabled in whitepaper/Makefile PANDOC_FLAGS) passes
+# them through to aether.tex unchanged. Captions are read from the sidecars
+# so the wording in the paper stays in lockstep with what the figure
+# actually encodes.
+
+_FIGURES_DIR = Path(__file__).resolve().parent / "figures"
+
+# Map: exact heading line in WHITEPAPER_ACADEMIC.md  ->  ordered list of
+# (figure_stem, latex_label, fig_position) tuples to inject after it.
+# `fig_position` is the LaTeX float specifier (e.g. "t" for top of page).
+FIGURE_INJECTIONS: dict[str, list[tuple[str, str, str]]] = {
+    "### 9.2 Latency Analysis (H2)": [
+        ("cross_system_latency", "fig:cross-system-latency", "t"),
+        ("parallel_speedup",     "fig:parallel-speedup",     "t"),
+    ],
+    "### 9.3 Caching Performance (H3)": [
+        ("cache_hit_rate",       "fig:cache-hit-rate",       "t"),
+    ],
+    "### 9.5 Type Safety Analysis (H1)": [
+        ("type_safety_corpus",   "fig:type-safety-corpus",   "t"),
+    ],
+    "### 9.8 Compile-Time Taint Tracking vs Prompt Injection": [
+        ("security_outcome",     "fig:security-outcome",     "t"),
+    ],
+}
+
+
+# LaTeX-special characters that survive the sidecar JSON unchanged but must
+# be escaped before being dropped into a \caption{...}. The sidecar captions
+# are plain prose by design (no inline math, no LaTeX markup), so a
+# straightforward escape is sufficient and avoids smuggling typos into raw
+# LaTeX from a JSON edit.
+_LATEX_ESCAPES = [
+    ("\\", r"\textbackslash{}"),
+    ("&", r"\&"),
+    ("%", r"\%"),
+    ("$", r"\$"),
+    ("#", r"\#"),
+    ("_", r"\_"),
+    ("{", r"\{"),
+    ("}", r"\}"),
+    ("~", r"\textasciitilde{}"),
+    ("^", r"\textasciicircum{}"),
+]
+
+
+def _latex_escape(s: str) -> str:
+    # `\` must be replaced first so subsequent replacements don't double-escape.
+    for src, dst in _LATEX_ESCAPES:
+        s = s.replace(src, dst)
+    return s
+
+
+def _render_figure_block(stem: str, label: str, position: str) -> str:
+    sidecar = _FIGURES_DIR / f"{stem}.json"
+    if not sidecar.is_file():
+        raise FileNotFoundError(
+            f"figure sidecar missing: {sidecar} (run bench/figures/generate_figures.py)"
+        )
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    caption = _latex_escape(data["caption"])
+    return (
+        "\n"
+        f"\\begin{{figure}}[{position}]\n"
+        f"  \\centering\n"
+        f"  \\includegraphics[width=\\linewidth]{{figures/{stem}.pdf}}\n"
+        f"  \\caption{{{caption}}}\n"
+        f"  \\label{{{label}}}\n"
+        f"\\end{{figure}}\n"
+    )
+
+
 def preprocess(text: str) -> str:
     out: list[str] = []
     in_fence = False
@@ -215,6 +294,12 @@ def preprocess(text: str) -> str:
             rewritten = _round_long_floats(rewritten)
             rewritten = _truncate_shas(rewritten)
         out.append(rewritten)
+
+        # Inject figure(s) immediately after a matching section heading.
+        injections = FIGURE_INJECTIONS.get(line.rstrip())
+        if injections is not None:
+            for stem, label, position in injections:
+                out.append(_render_figure_block(stem, label, position))
         i += 1
 
     return "\n".join(out) + "\n"

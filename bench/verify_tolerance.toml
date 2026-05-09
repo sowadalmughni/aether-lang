@@ -1,0 +1,99 @@
+# bench/verify_tolerance.toml
+#
+# Declarative tolerance config consumed by bench/verify_reproduction.py.
+# Drives the diff between freshly produced JSONs in bench/results/repro/
+# and the committed reference JSONs in bench/results/.
+#
+# Three buckets:
+#   - exact_required: fields that must match the reference exactly
+#   - numeric_tolerant: fields whose .mean must lie within reference.ci95
+#       widened by the listed fractional tolerance (e.g. 0.25 = +/-25%)
+#   - ignore: glob patterns excluded from comparison entirely
+#
+# requires_real_api lists JSON files that the mock-mode reproducer cannot
+# regenerate. The diff reports them as "n/a (requires OPENAI_API_KEY)".
+#
+# Note: TOML treats every key after a [table] header as a member of that
+# table. So all top-level keys must precede the [numeric_tolerant] table.
+
+exact_required = [
+  "system",
+  "version_label",     # human-readable version label, when present (not the git_sha)
+  "provider",
+  "datasets",
+  "configs",
+  "buckets",
+  "dataset",
+  "dataset_size",
+  "trials_per_config",
+  "trials",
+  "tokens_total",
+  "tokens_input",
+  "tokens_output",
+  "tokens_saved",
+  "tokens_saved_total",
+  "cache_hits",
+  "cache_misses",
+  "cache_hit_rate",
+  "em",
+  "f1",
+  "prec",
+  "recall",
+  "em_mean",
+  "f1_mean",
+  "prec_mean",
+  "recall_mean",
+  "n_eval",
+  "successful",
+  "failed",
+  "errors",
+  "warmup_tokens_input",
+  "warmup_tokens_output",
+  "parallelization_factor",
+  "result",                    # typesafety: caught_at_compile_time | missed_silently | ...
+  "exit_code",
+  "error_class_matched",
+  "expected_aether_error_classes",
+  "bucket",
+  "id",
+  "exception_class",
+]
+
+ignore = [
+  "measured_at",
+  "git_sha",
+  "version",                   # git_sha-style hashes; will differ across runs
+  "hardware",                  # CPU/RAM/OS recorded for reproducibility, not compared
+  "notes",                     # free-text per-field notes
+  "stderr_excerpt",            # exact stderr text varies (line/column numbers)
+  "stdout_excerpt",
+  "traceback_first_line",
+  "raw_trial_results.*.latencies_ms",
+  "raw_trial_results.*.timestamps_ms",
+  "raw_trial_results.*.duration_ms",
+  "raw_trial_results.*.start_ts",
+  "raw_trial_results.*.end_ts",
+]
+
+requires_real_api = [
+  "aether_real_api_v1.json",
+  "langchain_real_api_v1.json",
+  "dspy_real_api_v1.json",
+  "real_api_v1.json",
+  "security_v1.json",
+]
+
+# Files we don't try to re-produce in the mock-mode reproducer (legacy / one-off):
+skip = [
+  "benchmark_20260503_084135.json",  # legacy timestamped run, superseded by aether_mock_v1.json
+]
+
+[numeric_tolerant]
+"latency_p50_ms" = 0.25
+"latency_p95_ms" = 0.30
+"latency_p99_ms" = 0.50
+"p50"            = 0.25
+"p95"            = 0.30
+"p99"            = 0.50
+"total_time_ms"  = 0.30
+"latency_ms"     = 0.30

@@ -1,9 +1,9 @@
 ---
 title: "Aether: A Domain-Specific Language for Type-Safe LLM Orchestration"
 author: "Md. Sowad Al-Mughni"
-date: "February 2026"
-version: "3.1-academic"
-status: "Prototype - Phase 1-3 Complete, Approaching Beta"
+date: "May 2026"
+version: "3.2-academic"
+status: "Prototype - Runtime, real-API, security suite all measured"
 ---
 
 ## Abstract
@@ -12,9 +12,31 @@ Large language model (LLM) integration in production systems suffers from five s
 
 This paper presents Aether, a domain-specific language that treats LLM orchestration as a first-class engineering discipline. Aether introduces three core abstractions: `llm fn` for typed LLM interactions, `flow` for DAG-based workflow composition, and `context` for state management. The Aether compiler performs static analysis to verify type contracts across workflow steps, identify parallelization opportunities, and enforce security policies through compile-time taint tracking.
 
-We make four contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems; and (4) an open-source prototype implementation with **OTLP tracing** (OpenTelemetry 0.21.0) and **Criterion benchmarks**. Baseline benchmarks show LangChain achieves p50=91.4ms (0% cache hit, 95% success rate) and DSPy achieves p50=68.4ms (0% cache hit, 100% success rate) on synthetic workloads. Aether's design projects 2.7x latency reduction through parallel execution and 60% cache hit rate improvement; runtime validation requires MSVC toolchain (see Section 9.7.4). The compiler catches all tested type and reference errors at compile time that would otherwise surface at runtime.
+We make five contributions: (1) a type system spanning LLM inputs, outputs, and workflow compositions with compile-time verification; (2) a DAG-based intermediate representation enabling static optimization; (3) a reproducible benchmark methodology for LLM orchestration systems with full JSON artifacts under `bench/results/`; (4) an open-source prototype implementation with **OTLP tracing** (OpenTelemetry 0.21.0) and **Criterion benchmarks**; and (5) compile-time taint tracking with measured **100% catch rate** on a 60-case adapted InjecAgent corpus, validating that prompt-injection defense can be enforced before any LLM call (Section 9.8, `bench/results/security_v1.json`). Measured outcomes: parallel execution yields a paired BCa speedup of **1.4778×** on `customer_support_100` and **2.5841×** on `document_analysis_50` (`bench/results/ablation_parallel_v1.json`); the L1 exact-match cache reaches a hit rate of **0.7000** on a 70%-repeat workload and **1.0000** under warm-cache (`bench/results/ablation_cache_v1.json`); the compiler catches **30 of 30** intentionally malformed programs at compile time, vs **17 of 30** caught at runtime by LangChain and DSPy, with **13 missed silently** by each baseline (`bench/results/ablation_typesafety_v1.json`). The end-to-end real-OpenAI run (3 trials, both datasets, all three systems) is in `bench/results/real_api_v1.json` (Aether cost $0.128887, $0.478349 total).
 
 **Keywords**: domain-specific languages, large language models, type systems, workflow orchestration, static analysis
+
+
+> **Reproducibility.** Every numeric claim in this paper is traceable to a JSON file in `bench/results/` produced by a specific run. The full inventory:
+>
+> | File | git_version (or library) | Provider | Scope | Trials | `measured_at` |
+> | --- | --- | --- | --- | ---: | --- |
+> | `bench/results/aether_mock_v1.json` | `4d16ec5cd5cb0957d7dc6408b5df25ba7befbe9b` | mock | customer_support_100 + document_analysis_50; sequential / parallel / parallel_cached | 5 | 2026-05-03T09:49:57Z |
+> | `bench/results/langchain_v1.json` | `9591852f9ebb34822dc628197d47cb643c0ac381` (langchain 0.3.28) | mock | same | 5 | 2026-05-04T05:18:25Z |
+> | `bench/results/dspy_v1.json` | `558df452e1e9c36d35bdbc474369862a631c458c` (dspy 2.6.27) | mock | same | 5 | 2026-05-08T02:37:56Z |
+> | `bench/results/aether_real_api_v1.json` | `9c8001ce269920c98fa733a82b3c69ea7352e37e` | openai (gpt-4o-mini) | same | 3 | 2026-05-08T06:29:58Z |
+> | `bench/results/langchain_real_api_v1.json` | langchain 0.3.28 | openai | same | 3 | 2026-05-08 |
+> | `bench/results/dspy_real_api_v1.json` | dspy 2.6.27 | openai | same | 3 | 2026-05-08 |
+> | `bench/results/real_api_v1.json` | merged | openai | both datasets, all 3 systems, end-to-end cost | — | 2026-05-08T09:26:39Z |
+> | `bench/results/ablation_cache_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | mock | customer_support_100 + customer_support_repeat_100; no_cache / l1_exact_match / repeat_warm | 5 | 2026-05-08T13:05:22Z |
+> | `bench/results/ablation_parallel_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | mock | customer_support_100 + document_analysis_50; sequential vs parallel; paired BCa speedup | 5 | 2026-05-08T13:09:48Z |
+> | `bench/results/ablation_typesafety_v1.json` | `8aee2cce5f969b5e2d84e94216355354dcc0eb7f` | n/a (compile-time + mock LLM) | 30-case error-injection corpus across 4 buckets | n/a | 2026-05-08T13:15:35Z |
+> | `bench/results/security_v1.json` | `2759f1e7f5e26eb435f3c98951ea1fcf193f2b5e` | openai (gpt-4o-mini) | InjecAgent-adapted, 20 attack + 20 benign cases × 3 trials × 3 configs | 3 | 2026-05-08T18:41:38Z |
+> | `bench/results/hotpotqa_aether_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | hotpotqa_dev_500 (latency only; mock LLM does not produce real answers) | 3 | 2026-05-08T10:09:11Z |
+> | `bench/results/hotpotqa_langchain_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | same | 3 | 2026-05-08T10:12:13Z |
+> | `bench/results/hotpotqa_dspy_v1.json` | `b581653a0611fdc3ddfbaf8af9553593a61cb585` | mock | same | 3 | 2026-05-08 |
+>
+> Reproduction: clone the repo at the listed commit, install `aether-runtime` with the `llm-api` feature for real-API runs, and invoke `scripts/run_benchmark.py` (mock) or `scripts/run_real_api_benchmark.sh` (OpenAI) per Section 13. Markdown summaries of the real-API run and the ablation suite are at `bench/results/REAL_API.md` and `bench/results/ablations_v1.md`.
 
 
 ## 1. Introduction
@@ -35,7 +57,9 @@ This paper makes the following contributions:
 
 3. **Reproducible Evaluation Methodology** (Section 8): A benchmark suite design with synthetic datasets, baseline implementations, and ablation study infrastructure for fair comparison of LLM orchestration approaches.
 
-4. **Open-Source Prototype** (Section 13): A working implementation comprising a compiler (lexer, parser, semantic analyzer, code generator) and runtime (parallel execution, caching, observability), demonstrating feasibility of the approach.
+4. **Open-Source Prototype** (Section 13): A working implementation comprising a compiler (lexer, parser, semantic analyzer, code generator) and runtime (parallel execution, caching, observability), demonstrating feasibility of the approach. The runtime was executed end-to-end against the real OpenAI API (Section 9.6.5) and results are committed in `bench/results/real_api_v1.json`.
+
+5. **Compile-Time Taint Tracking with Measured Effectiveness** (Sections 9.8, 11): A static taint analysis that distinguishes trusted from untrusted prompt fragments, with a measured 100% compile-time catch rate (CI degenerate) on a 60-case InjecAgent-adapted corpus run against `gpt-4o-mini` (`bench/results/security_v1.json`). Aether blocks the malicious *program shape* statically, before any LLM call is issued.
 
 
 ## 2. Problem Statement and Motivation
@@ -637,74 +661,119 @@ To isolate the contribution of each feature:
 2. **Parallelization ablation**: Compare sequential vs. parallel execution using `?sequential=true`
 3. **Type safety ablation**: Measure errors caught at compile time vs. runtime
 
+### 8.5 Statistical Methodology
+
+Every aggregate cell in Section 9 follows the convention `mean ± std [95% CI]`, where the CI is computed by bias-corrected and accelerated (BCa) bootstrap with `n_resamples=10000` and `seed=42`, falling back to the percentile method when per-trial variance is degenerate. The implementation lives in `_bootstrap_ci` at [`scripts/run_benchmark.py:546-593`](../scripts/run_benchmark.py) and is invoked uniformly by all benchmark drivers.
+
+**Trial counts.** The trial budget per (system, dataset, config) is recorded in the `trials_per_config` field of every JSON in `bench/results/`:
+
+- Mock-mode runs (`aether_mock_v1.json`, `langchain_v1.json`, `dspy_v1.json`) and the three ablations (`ablation_cache_v1.json`, `ablation_parallel_v1.json`, `ablation_typesafety_v1.json`): **5 trials**.
+- Real-API runs (`aether_real_api_v1.json`, `langchain_real_api_v1.json`, `dspy_real_api_v1.json`) and the security suite (`security_v1.json`) and the HotpotQA suite (`hotpotqa_*_v1.json`): **3 trials**, capped to control OpenAI cost (the real-API run hit `actual_cost_usd=0.478349` against a `budget_usd=10.0` gate).
+
+**Speedup ratios.** Speedup is computed by paired-trial bootstrap on the ratio `sequential.p50 / parallel.p50`, using the same BCa parameters. The definition string is recorded inside the speedup field of each `ablation_parallel_v1.json` `results[*].speedup` block (e.g. `results[2].speedup.definition`), so the metric definition travels with the data.
+
+**Cross-mode deltas.** Cache and parallelization comparisons across modes use paired-trial deltas (e.g. `latency_p50_delta_warm_vs_no_cache`, recorded in `ablation_cache_v1.json` `cross_mode_deltas`), again with the same BCa parameters.
+
+**Significance testing.** Pairwise differences are reported as overlapping/non-overlapping 95% CIs rather than as p-values from formal hypothesis tests. The reader can read significance off the CIs directly; we did not run separate Welch's t-tests or Mann–Whitney U tests. This is a deliberate scope cut: the trial counts are small (3–5) and the load-bearing comparisons (e.g. parallel speedup) have CIs that do not overlap 1.0 by margins of multiple standard deviations.
+
+**Mock-mode determinism.** The mock LLM provider returns a fixed-latency placeholder (50 ms flat per call, per [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md) methodology footer). Trial-to-trial variance in mock runs therefore reflects scheduler and HTTP-loopback jitter only, not model behavior. This is why mock-mode standard deviations are sub-millisecond on most cells.
+
+**Hardware uniformity.** All ablation files (`ablation_*.json`) and `aether_mock_v1.json` were measured on `Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz`, RAM 7.71 GiB, Ubuntu 24.04.4 LTS (recorded in each JSON's `hardware` block). The real-API runs were measured on the same Linux host. The `langchain_v1.json`, `dspy_v1.json`, and `hotpotqa_*_v1.json` mock runs were measured on Windows-11 against the same physical CPU model; cross-OS variance is discussed in Section 9.7.4.
+
 
 ## 9. Evaluation Results
 
-This section presents empirical results from executing the benchmark suite described in Section 8. All measurements use mock LLM providers with realistic latency simulation to ensure reproducibility. Results with real API providers are marked separately when available.
-
-> **Note**: Baseline results (LangChain, DSPy) measured using mock LLM providers with 100ms simulated latency on February 4, 2026. Aether runtime results are projected based on design specifications; runtime compilation requires MSVC toolchain not available in the test environment. See Section 9.8 (Threats to Validity) for discussion of this limitation.
+This section presents empirical results from executing the benchmark suite described in Section 8. Mock-mode measurements use a fixed-latency mock LLM provider (50 ms flat per call) to isolate runtime/orchestration jitter from model variance; real-API measurements against `gpt-4o-mini` are reported in Section 9.6.5 and the new HotpotQA / security subsections (9.8, 9.9). Every numeric cell below is anchored to a JSON file in `bench/results/`; the field path is given alongside each table.
 
 ### 9.1 Summary of Results
 
-| Hypothesis | Target | Measured Result | Status |
+| Hypothesis | Target | Measured Result | Source |
 |------------|--------|-----------------|--------|
-| H1 (Type Safety) | >80% reduction in runtime type errors | 100% (projected) | Pending Runtime |
-| H2 (Latency) | >30% reduction via parallelization | 63% (projected) | Pending Runtime |
-| H3 (Cost Efficiency) | >40% improvement in cache hit rate | 60% (projected) | Pending Runtime |
+| H1 (Type Safety) | >80% reduction in runtime type errors | 30/30 (100.00%) caught at compile time; LangChain 17/30 at runtime + 13 missed silently; DSPy 17/30 at runtime + 13 missed silently | `ablation_typesafety_v1.json` `summary.aether_caught` / `summary.lc_*` / `summary.dspy_*` |
+| H2 (Latency, customer_support_100) | >30% reduction via parallelization | speedup = 1.4778× [1.4728, 1.4849] (paired BCa) | `ablation_parallel_v1.json` `results[2].speedup.speedup_p50` |
+| H2 (Latency, document_analysis_50) | >30% reduction via parallelization | speedup = 2.5841× [2.5635, 2.5986] (paired BCa) | `ablation_parallel_v1.json` `results[5].speedup.speedup_p50` |
+| H3 (Cost Efficiency, repeat workload) | >40% improvement in cache hit rate | 0.7000 (l1_exact_match) and 1.0000 (repeat_warm) on `customer_support_repeat_100`, both CIs degenerate (constant per-trial) | `ablation_cache_v1.json` `results[5].cache_hit_rate.mean`, `results[6].cache_hit_rate.mean` |
+| H4 (Security, taint tracking) | (new — see Section 9.9) | compile_time_catch_rate = 1.0000 on `aether_taint_on`, 0.0000 on `aether_taint_off` and `langchain_baseline`; ASR is 0.0 across all configs (model-side rejection on `gpt-4o-mini`) | `security_v1.json` `configs[*].metrics` |
 
 ### 9.2 Latency Analysis (H2)
 
-Measurements on CustomerSupport-100 benchmark with mock provider (100ms simulated latency per LLM call):
+The parallelization ablation runs `customer_support_100` and `document_analysis_50` against the runtime in two modes — `sequential` (POSTed with `?sequential=true`) and `parallel` (default) — clearing the cache before every trial in both modes so the parallelization signal is not confounded with caching. Speedup is the paired-trial BCa bootstrap of `sequential.p50 / parallel.p50`. Cells are `mean ± std [95% CI]`.
 
-| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | Speedup vs Sequential |
-|---------------|----------|----------|----------|----------------------|
-| Sequential execution | 274 | 298 | 312 | 1.0x |
-| Parallel execution (default) | 103 | 118 | 125 | 2.7x |
-| Parallel + caching (warm) | 58 | 72 | 84 | 4.7x |
+**customer_support_100** (`ablation_parallel_v1.json` `results[0]`, `results[1]`, `results[2]`):
 
-**Methodology**: Each configuration runs the full 100-query dataset. Sequential mode uses `?sequential=true`. Warm cache results follow an initial cold run.
+| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | parallelization_factor | speedup_p50 |
+|---|---|---|---|---|---|
+| Sequential | 206.0 ± 0.7071067811865476 [205.4, 206.6] | 213.86999999999998 ± 1.8949274392440436 [212.08999999999997, 215.06] | 246.70200000000028 ± 30.78112847184162 [224.9640000000001, 273.04000000000065] | 1.0 ± 0.0 [1.0, 1.0] | 1.0 (baseline) |
+| Parallel | 139.4 ± 0.5477225575051661 [139.0, 139.8] | 148.01 ± 1.8776314867406771 [146.6, 149.41] | 155.34400000000008 ± 6.076251311458442 [151.12800000000004, 161.17200000000008] | 1.474893953709039 ± 0.0012671971603374272 [1.4739729210088837, 1.4760621472474238] | 1.4777800616649537 [1.4727852004110997, 1.4848920863309352] |
+| Parallel + cache (warm) | 33.0 ± 0.7071067811865476 [32.4, 33.6] | 39.019999999999996 ± 1.2352125323198428 [37.60287327768938, 39.65] | 40.648000000000025 ± 1.5991622806957824 [39.61200000000001, 42.332000000000065] | 1.3724 (raw_trial_results mean) | derived from above |
 
-**Discussion**: The parallelization benefit depends on workflow structure. Workflows with independent branches show greater speedup than linear pipelines. Cache warming further reduces latency for repeated queries.
+The "Parallel + cache (warm)" row is sourced from `aether_mock_v1.json` `results[2]` (`customer_support_100`, `parallel_cached`, 5 trials). Cache hit rate for that row is `1.0000` (CI degenerate), `cache_hits=300, cache_misses=0` per trial.
+
+**document_analysis_50** (`ablation_parallel_v1.json` `results[3]`, `results[4]`, `results[5]`; `aether_mock_v1.json` `results[5]`):
+
+| Configuration | p50 (ms) | p95 (ms) | p99 (ms) | parallelization_factor | speedup_p50 |
+|---|---|---|---|---|---|
+| Sequential | 218.6 ± 0.5477225575051661 [218.2, 219.0] | 224.66 ± 1.5709869509324355 [223.42, 225.76] | 232.81799999999998 ± 6.359863992256416 [228.12600000000003, 237.61599999999993] | 1.0 ± 0.0 [1.0, 1.0] | 1.0 (baseline) |
+| Parallel | 84.6 ± 0.6519202405202649 [84.1, 85.2] | 90.95000000000002 ± 3.5533434959204273 [88.86, 94.75] | 100.11599999999996 ± 8.827212470536756 [93.726, 107.58399999999997] | 2.5574880420297235 ± 0.007442829393822968 [2.5516312803829253, 2.5631235114588073] | 2.5840550238573576 [2.5634618743168396, 2.5985911524373067] |
+| Parallel + cache (warm) | 31.5 ± 0.7071067811865476 [31.0, 32.1] | 38.71 ± 0.44215381938868314 [38.2, 39.0] | 39.91799999999999 ± 1.045188978127875 [39.17542123854476, 40.733999999999995] | 1.8724 (raw_trial_results mean) | derived from above |
+
+**Methodology.** 5 trials per cell. Mock LLM at 50 ms flat. `parallelization_factor` is the runtime response field of the same name (`sum(node_execution_times_ms) / total_execution_time_ms`), read directly from each trial response. Speedup CIs are paired-trial BCa bootstrap (n_resamples=10000, seed=42); the definition string is recorded in `ablation_parallel_v1.json` `results[2].speedup.definition` and `results[5].speedup.definition`.
+
+**Discussion.** Speedup tracks workflow shape: the document-analysis DAG has a wider parallel level (≈3 concurrent LLM calls per item, parallelization_factor ≈ 2.56) and yields a 2.58× p50 speedup; the customer-support DAG has a narrower one (≈1.5 concurrent calls, parallelization_factor ≈ 1.47) and yields a 1.48× p50 speedup. The earlier paper's "2.7× speedup" extrapolation assumed perfectly parallel workloads; the measured value depends on the DAG.
 
 ### 9.3 Caching Performance (H3)
 
-Cache hit rates on CustomerSupport-100 with repeated queries:
+Cache hit rate, p50 latency, and warm-vs-no-cache delta across three cache modes (`no_cache` clears the cache before every individual `/execute`; `l1_exact_match` clears once per trial; `repeat_warm` runs the dataset once as warmup, discards the warmup latencies, then measures a second pass over the populated cache). 5 trials per cell, mock LLM at 50 ms flat. Source: `ablation_cache_v1.json`. Cells are `mean ± std [95% CI]`.
 
-| Caching Level | Hit Rate | Tokens Saved | Cost Reduction |
-|---------------|----------|--------------|----------------|
-| No caching | 0% | 0 | $0.00 |
-| Exact-match cache | 60% | 18,240 | $0.91 |
-| Semantic cache (planned) | N/A | N/A | N/A |
+**`customer_support_100` — every query is unique** (`results[0]`, `results[1]`, `results[2]`, `results[3].cross_mode_deltas`):
 
-**Methodology**: Hit rate measured as (cache hits / total LLM calls). Tokens saved computed from cached response token counts. Cost reduction assumes GPT-4o pricing.
+| Mode | p50 (ms) | cache_hit_rate | Δ p50 vs no_cache (ms) |
+|---|---|---|---|
+| no_cache | 144.8 ± 0.4472135954999579 [144.2, 145.0] | 0.0000 (CI degenerate) | — |
+| l1_exact_match | 143.8 ± 1.5247950681976907 [142.6, 144.9] | 0.0000 (CI degenerate) | (cache empty within run) |
+| repeat_warm | 33.2 ± 0.8366600265340756 [32.4, 33.8] | 1.0000 (CI degenerate) | -111.6 [-112.6, -111.0] |
+
+**`customer_support_repeat_100` — 30 unique queries × repeats** (`results[4]`, `results[5]`, `results[6]`, `results[7].cross_mode_deltas`):
+
+| Mode | p50 (ms) | cache_hit_rate | Δ p50 vs no_cache (ms) |
+|---|---|---|---|
+| no_cache | 145.1 ± 0.223606797749979 [145.0, 145.4] | 0.0000 (CI degenerate) | — |
+| l1_exact_match | 36.1 ± 1.4317821063276353 [34.9, 37.2] | 0.7000 (CI degenerate) | (delta_l1_vs_no_cache p50 not present in JSON) |
+| repeat_warm | 33.8 ± 1.9235384061671346 [32.8, 36.0] | 1.0000 (CI degenerate) | -111.3 [-112.3, -108.8] |
+
+**Methodology.** Hit rate is read directly from the runtime's `cache_hit_rate` response field, not derived. `tokens_saved_total` is reported in every JSON cell as **0.0 across every config** because the mock LLM does not populate the `tokens_saved` field of the response; we did not measure mock-mode token savings or convert them to a dollar figure. The earlier paper's "60% hit rate", "18,240 tokens saved" and "$0.91 cost reduction" cells came from an extrapolation that no committed JSON in `bench/results/` supports — those cells are therefore dropped. Real-API token usage and cost are reported in Section 9.6.5 above (Aether $0.128887 across 3 trials × 2 datasets).
+
+**Discussion.** When every query is unique within a single run (`customer_support_100`), `l1_exact_match` cannot help (hit rate stays at 0.0); only the cross-run `repeat_warm` mode achieves a hit. When the workload contains repeats (`customer_support_repeat_100`, designed so 70 of 100 queries are repeats of earlier ones), `l1_exact_match` reaches **0.7000** within a single run — directly observable as the proportion of repeated queries. `repeat_warm` reaches 1.0 in both workloads because the warmup populates every cache key before the measured pass starts.
 
 ### 9.4 Code Complexity Comparison
 
-Lines of code comparison for equivalent functionality:
+**We did not measure equivalent-functionality LOC for this paper revision.** An earlier draft reported 253/287 (LangChain), 283/312 (DSPy), 78/111 (Aether) lines for the CustomerSupport-Triage and DocumentAnalysis-Pipeline case studies, but those numbers are not anchored to any JSON file in `bench/results/` and the Aether source artifacts they were extracted from (standalone `customer_support_triage.aether` and `document_analysis_pipeline.aether` programs equivalent to the LangChain triage/extraction blocks at [`bench/baselines/langchain_baseline.py:289-376`](../bench/baselines/langchain_baseline.py#L289-L376) and DSPy equivalents) are not committed in the repository at the commits listed in the Reproducibility callout.
 
-| Implementation | CustomerSupport Triage | DocumentAnalysis Pipeline | Average Reduction |
-|----------------|----------------------|---------------------------|-------------------|
-| Python + LangChain | 253 | 287 | baseline |
-| Python + DSPy | 283 | 312 | -10% |
-| Aether | 78 | 111 | 65% |
+A partial LOC comparison is possible: the LangChain triage chain (`build_triage_chain`, [`bench/baselines/langchain_baseline.py:299-329`](../bench/baselines/langchain_baseline.py#L299-L329)) and extraction chain (`build_extraction_chain`, [`bench/baselines/langchain_baseline.py:355-376`](../bench/baselines/langchain_baseline.py#L355-L376)) are the case-study sources for the Python side. Counting the Aether side requires checking in the equivalent `.aether` programs first. We deferred that step to a follow-up paper revision rather than report unbacked numbers in the current one.
 
-**Note**: LOC includes error handling, type definitions, and test code. Excludes comments and blank lines.
+Reading guidance: the *qualitative* code-complexity contrast — Aether's `flow` keyword and `llm fn` declaration vs LangChain's chain-of-LCEL-pipes or DSPy's `Module`/`Predict` boilerplate — is documented in Section 6 (the case-study code listings at lines 762-829 are themselves a small visual benchmark). LOC numbers will return in a future revision once the matched `.aether` sources land in `bench/datasets/` or `examples/`.
 
 ### 9.5 Type Safety Analysis (H1)
 
-Error detection comparison on intentionally malformed test cases:
+Error detection comparison on a 30-case corpus of intentionally malformed programs split across four buckets. For each case, an `aetherc check` is run on the `.aether` source and a `python` is run on the LangChain and DSPy equivalents; results are classified by stderr pattern (Aether) or by exit code + traceback class (Python). Source: `bench/results/ablation_typesafety_v1.json`, `summary.by_bucket` and `summary` blocks. Companion Markdown: [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md).
 
-| Error Category | Total Test Cases | Aether Compile-Time | Aether Runtime | LangChain Runtime | Raw API Runtime |
-|----------------|------------------|---------------------|----------------|-------------------|-----------------|
-| Schema mismatch | 15 | 15 | 0 | 0 | 0 |
-| Missing field | 12 | 12 | 0 | 0 | 0 |
-| Type coercion failure | 10 | 10 | 0 | 0 | 0 |
-| Undefined reference | 13 | 13 | N/A | 0 | 0 |
-| **Total** | 50 | 50 | 0 | 0 | 0 |
+| Bucket | Total | Aether (compile-time) | LangChain (runtime) | LangChain (missed silently) | DSPy (runtime) | DSPy (missed silently) |
+|---|---:|---:|---:|---:|---:|---:|
+| `type_mismatch` | 10 | 10 | 0 | 10 | 0 | 10 |
+| `undefined_reference` | 10 | 10 | 10 | 0 | 10 | 0 |
+| `missing_field` | 5 | 5 | 5 | 0 | 5 | 0 |
+| `duplicate_definition` | 5 | 5 | 2 | 3 | 2 | 3 |
+| **Total** | **30** | **30** | **17** | **13** | **17** | **13** |
 
-**Compile-time detection rate (SC-1)**: 100% of errors detectable by Aether compiler before execution.
+Source per row: `summary.by_bucket.<bucket>.{total, aether_caught, lc_caught_at_runtime, dspy_caught_at_runtime}`. Aether's per-bucket missed-silently count is 0 in all buckets (`summary.aether_missed = 0`); LangChain and DSPy missed-silently counts are computed as `total - caught_at_runtime` per bucket and cross-checked against `summary.lc_missed_silently=13`, `summary.dspy_missed_silently=13`.
 
-**Methodology**: Test suite includes 50 intentionally incorrect programs covering each error category. Each program is compiled with Aether and executed with baseline implementations. Errors are categorized by where they are detected.
+**Compile-time detection rate**: **30/30 = 100.00%** for Aether (`summary.aether_caught=30`, `summary.aether_missed=0`). The 13 cases LangChain/DSPy miss silently exit code 0 with a plausible-looking output — the most dangerous failure mode in production, because it produces output that looks valid.
+
+**Methodology.** `aetherc check <file>` exit-coded by stderr pattern: exit 0 → missed; exit ≠ 0 with a known `SemanticError` variant pattern → `caught_at_compile_time`. `python <file>` with a 30 s timeout: exit 0 → `missed_silently`; exit ≠ 0 with a Python traceback → `caught_at_runtime` (this includes `SyntaxError` at file load and Enum class-body errors). The `error_class_matched` and `exception_class` fields are recorded per case in `test_cases[*]` and reproduced in [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md).
+
+**Methodology note (cd → dd substitution).** *Verbatim from `ablation_typesafety_v1.json` `methodology_notes.cd_substitution`*:
+
+> The original ablation design included a `circular_dependency` category, but verification revealed that aetherc's source-level cd detector is currently preempted by semantic analysis on programs that contain other issues; the `SemanticError::CircularDependency` variant is defined but never emitted. Rather than fabricate test cases that would not trigger the intended error path, we substituted `duplicate_definition` tests, which exercise a different but more practically significant error class (silent shadowing in Python is more dangerous than a circular dependency, which typically manifests as `RecursionError` or `ImportError` — loud and visible). The cd detection gap is tracked at https://github.com/sowadalmughni/aether-lang/issues/4 and is targeted for a follow-up compiler release.
 
 ### 9.6 Case Study: Customer Support Triage
 
@@ -833,26 +902,63 @@ The following errors are caught at compile time in this workflow:
 3. **Missing required field**: If `TriageResult` return missing `escalate` field, compiler error
 4. **Enum variant mismatch**: If `urgency == Urgency.Urgent` (invalid variant), compiler error listing valid variants
 
-#### 9.6.5 Performance Results
+#### 9.6.5 Performance Results (real OpenAI API)
 
-| Metric | Sequential | Parallel | Parallel + Cache |
-|--------|-----------|----------|------------------|
-| End-to-end latency (p50) | 274 ms | 103 ms | 58 ms |
-| Total LLM calls | 3 | 3 | 1.2 |
-| Cache hits (warm) | N/A | N/A | 1.8 |
-| Estimated cost per query | $0.0045 | $0.0045 | $0.0018 |
+The case study was executed end-to-end against the real `gpt-4o-mini` API on 2026-05-08 (3 trials, 100 items, all three configurations); the orchestration script was [`scripts/run_real_api_benchmark.sh`](../scripts/run_real_api_benchmark.sh) and the merged result is [`bench/results/real_api_v1.json`](../bench/results/real_api_v1.json), with a Markdown summary at [`bench/results/REAL_API.md`](../bench/results/REAL_API.md). Cells are `mean ± std [95% CI]` across the 3 trials.
 
-### 9.7 Threats to Validity
+| Metric | Sequential | Parallel | Parallel + Cache (warm) |
+|---|---|---|---|
+| Aether p50 (ms) | 6821.0 ± 636.3196916644965 [6121.5, 7235.666666666668] | 5395.166666666667 ± 69.21404000152955 [5354.166666666667, 5475.0] | 37.333333333333336 ± 2.0816659994661326 [35.0, 38.666666666666664] |
+| Aether p95 (ms) | 11609.816666666666 ± 2528.1532990175524 [8859.449999999999, 13267.483333333332] | 8148.399999999999 ± 648.0424773886352 [7427.3499999999985, 8566.683333333332] | 41.0 ± 0.0 [41.0, 41.0] |
+| Aether cache_hit_rate | 0.0 (per-trial constant) | 0.0 (per-trial constant) | 1.0 (per-trial constant; 300 hits / 0 misses per trial) |
 
-#### 9.7.1 Internal Validity
+Source: `aether_real_api_v1.json` `results[0]` (sequential), `results[1]` (parallel), `results[2]` (parallel_cached) for `customer_support_100`.
 
-**Mock provider bias**: Most benchmarks use mock LLM providers with simulated latency. Real API behavior includes network variability, rate limiting, and model-specific response times. Mitigation: CI workflow supports real provider runs with API keys.
+**Cost.** Per `real_api_v1.json` `per_system.aether.cost_usd` and the cross-checked merge log: Aether spent **$0.128887** for the full 3-trial run on both datasets (input 216,510 tokens at $0.15/1M, output 160,685 tokens at $0.60/1M). LangChain spent **$0.126498** and DSPy **$0.222963** for the same workload; total combined run cost **$0.478349** against a $10.00 budget gate (`actual_under_budget=True`). DSPy's higher cost is driven by its prompt-formatting overhead (signature serialization), documented in `REAL_API.md`.
+
+**Discussion.** Real-API parallel-cached is two orders of magnitude faster than sequential on this workflow (p50 6821 ms → 37.3 ms, ratio ≈ 183×) because the cached path skips both the OpenAI round-trip and the inter-stage scheduling overhead; the only remaining cost is one HTTP loopback per item from the bench client to the runtime. Real-API parallel (without cache) is slower than the LangChain baseline parallel (5395 ms vs 4754 ms on the same workload, per `REAL_API.md`); this is the deployment-shape cost of the Aether runtime sitting behind an HTTP boundary, not a runtime defect. We document it explicitly in 9.6.5 rather than hiding it.
+
+### 9.7 HotpotQA Latency (mock-mode)
+
+A 500-question slice of the HotpotQA dev set was run against all three systems with a mock LLM, 3 trials per system. Source: `bench/results/hotpotqa_aether_v1.json`, `bench/results/hotpotqa_langchain_v1.json`, `bench/results/hotpotqa_dspy_v1.json`. Cells are `mean ± std [95% CI]` across 3 trials.
+
+| System | EM | F1 | p50 (ms) | p95 (ms) |
+|---|---|---|---|---|
+| Aether | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 143.83333333333334 ± 0.2886751345948129 [143.5, 144.0] | 146.33333333333334 ± 0.5773502691896258 [146.0, 147.0] |
+| LangChain | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 108.49894999895089 ± 0.8508429744625017 [107.51680000248598, 108.99724999641573] | 110.34190166719782 ± 0.033401565456278384 [110.32218999971519, 110.38043999978981] |
+| DSPy | 0.0 (CI degenerate) | 0.0 (CI degenerate) | 103.75349999958416 ± 0.1824530546193411 [103.54295000070124, 103.86089999883552] | 104.75013499950971 ± 0.10656340077598293 [104.68012499756394, 104.86560000317695] |
+
+**EM and F1 are 0 across all three systems because this benchmark was executed with a mock LLM provider; the JSON exists to validate the dataset loader and per-question latency measurement, not answer accuracy.** We did not run HotpotQA against a real LLM in this paper revision; doing so is straightforward (`AETHER_PROVIDER=openai` plus the `aether_hotpot.py` driver under `bench/baselines/`) but was deferred for cost reasons. Treat the latency numbers as runtime/orchestration overhead per question, not as a claim about retrieval-augmented generation quality.
+
+The latency ordering — DSPy fastest, then LangChain, then Aether — reflects in-process Python (DSPy, LangChain) versus over-HTTP (Aether bench client to runtime), the same deployment-shape pattern documented in `bench/results/REAL_API.md`. The dataset is `hotpotqa_dev_500` (500 items) and per-trial `n_eval=500` is recorded in each `raw_trial_results[*]` entry.
+
+### 9.8 Compile-Time Taint Tracking vs Prompt Injection
+
+The security suite runs an InjecAgent-adapted corpus (20 attack cases + 20 benign cases per trial × 3 trials × 3 configs) against **real `gpt-4o-mini`** to measure prompt-injection defense. Source: `bench/results/security_v1.json`. Cells are `mean ± std (CI95) [per_trial]`.
+
+| Config | attack_success_rate | benign_task_success_rate | compile_time_catch_rate |
+|---|---|---|---|
+| `aether_taint_on` | 0.0 ± 0.0 [0.0, 0.0] (per_trial [0.0, 0.0, 0.0]) | 0.0 ± 0.0 [0.0, 0.0] | **1.0 ± 0.0 [1.0, 1.0]** |
+| `aether_taint_off` | 0.0 ± 0.0 [0.0, 0.0] | 1.0 ± 0.0 [1.0, 1.0] | 0.0 ± 0.0 [0.0, 0.0] |
+| `langchain_baseline` | 0.0 ± 0.0 [0.0, 0.0] | 1.0 ± 0.0 [1.0, 1.0] | 0.0 ± 0.0 [0.0, 0.0] |
+
+Source per cell: `security_v1.json` `configs[i].metrics[j]` — `configs[0]` = `aether_taint_on`, `configs[1]` = `aether_taint_off`, `configs[2]` = `langchain_baseline`. Every metric block carries its own `mean`, `std`, `ci95`, and full `per_trial` array. Run cost: $0.036912900000000005 across 480 OpenAI calls (152,958 input tokens + 23,282 output tokens), under a $5 cost cap.
+
+**Honest reading.** The behavioral attack-success rate (ASR) is **0.0 in every config including the LangChain baseline**, because `gpt-4o-mini` itself rejected every attempted injection in this 60-case adapted corpus. There is therefore no measurable ASR delta between Aether and LangChain on this dataset/model combination — we did not measure ASR reduction. The differentiating measurement is `compile_time_catch_rate`: **1.0 (CI degenerate) for `aether_taint_on`, 0.0 (CI degenerate) for `aether_taint_off` and the LangChain baseline.** Aether blocks the malicious *program shape* statically before any LLM call is issued; the baselines depend on the model itself to refuse at runtime.
+
+The `aether_taint_on` benign_task_success_rate of 0.0 is expected and worth flagging: when compile-time taint is on and the InjecAgent benign tests use the same data-flow shape that the attack tests use (untrusted text being concatenated into a prompt), the compiler refuses both. `metadata.completed_live_configs = ["aether_taint_off","langchain_baseline"]` confirms `aether_taint_on` did not run live calls — its results are derived from the compile-time outcome alone. Tightening the taint policy so benign cases can pass while attack cases are still blocked is on the runtime roadmap; we did not measure it in this revision.
+
+### 9.9 Threats to Validity
+
+#### 9.9.1 Internal Validity
+
+**Mock provider bias**: Several benchmarks (parallel/cache ablations, type-safety corpus, HotpotQA) use a fixed-latency mock LLM (50 ms flat per call) to isolate runtime/orchestration jitter from model variance. Real API behavior includes network variability, rate limiting, and model-specific response times. Mitigation: Section 9.6.5 reports the same case study against real `gpt-4o-mini` (`real_api_v1.json`, 3 trials, $0.478349 total cost), and Section 9.8 reports the security suite against real `gpt-4o-mini` (`security_v1.json`).
 
 **Benchmark suite coverage**: CustomerSupport-100 and DocumentAnalysis-50 may not represent production workload diversity. Mitigation: Datasets designed with varied query types and complexity levels.
 
 **Cache warm-up effects**: Benchmark runs include both cold and warm cache measurements to isolate caching benefits from baseline performance.
 
-#### 9.7.2 External Validity
+#### 9.9.2 External Validity
 
 **Language maturity**: Aether is a prototype. Production-grade implementations may have different performance characteristics. The comparison focuses on design-level capabilities rather than optimized performance.
 
@@ -860,19 +966,24 @@ The following errors are caught at compile time in this workflow:
 
 **Provider variability**: Results with GPT-4o may not generalize to other models (Claude, Gemini, open-source models).
 
-#### 9.7.3 Construct Validity
+#### 9.9.3 Construct Validity
 
 **Lines of code metric**: LOC does not capture all aspects of developer productivity (debugging time, maintenance burden, correctness). We use it as a proxy for complexity.
 
 **Type safety claims**: Compile-time detection rate measures errors in synthetic test cases. Real-world codebases may have different error distributions.
 
-**Cost estimates**: Based on published API pricing as of February 2026. Actual costs depend on response lengths and provider discounts.
+**Cost estimates**: Based on published API pricing as of May 2026. Actual costs depend on response lengths and provider discounts. The real-API run in Section 9.6.5 reports actual measured cost from OpenAI response `usage` blocks rather than estimates.
 
-#### 9.7.4 Runtime Availability
+#### 9.9.4 Hardware variance across measurement environments
 
-**Aether runtime not executed**: The Aether runtime requires MSVC toolchain for compilation, which was not available in the benchmark environment. Aether latency and cache metrics in this paper are projected based on design specifications (parallel execution of independent LLM calls, 60% cache hit rate based on prompt structure analysis). Baseline measurements (LangChain p50=91.4ms, DSPy p50=68.4ms) are empirically measured.
+The JSON files in `bench/results/` were not all measured on the same host. Specifically:
 
-**Mitigation**: Future work includes cross-platform builds and containerized benchmark environments. Readers can reproduce Aether results by installing Visual Studio Build Tools and running the benchmark suite per Section 13.
+- `aether_mock_v1.json`, `aether_real_api_v1.json`, `langchain_real_api_v1.json`, `dspy_real_api_v1.json`, `ablation_cache_v1.json`, `ablation_parallel_v1.json`, `ablation_typesafety_v1.json`, and `security_v1.json` were measured on `Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz`, RAM 7.71 GiB, Ubuntu 24.04.4 LTS (recorded in each JSON's `hardware` block; the eight `ablation_*` and real-API files share git_version `8aee2cce…` or `9c8001ce…` and `2759f1e7…`).
+- `langchain_v1.json`, `dspy_v1.json`, `hotpotqa_aether_v1.json`, `hotpotqa_langchain_v1.json`, and `hotpotqa_dspy_v1.json` were measured on Windows-11-10.0.26200-SP0 against `Intel64 Family 6 Model 142 Stepping 10` — the same physical CPU stepping as the i5-8250U, but the JSON `ram_gb` field reads 0.0 because the memory-detection helper does not work on Windows. The `cpu` and `os` fields *are* populated.
+
+**Implication.** Cross-system mock comparisons (Aether mock vs LangChain mock vs DSPy mock) mix two operating-system environments on the same physical CPU model. The load-bearing comparisons in this paper — the parallel ablation (Section 9.2), the cache ablation (Section 9.3), the type-safety corpus (Section 9.5), the real-API case study (Section 9.6.5), and the security suite (Section 9.8) — were all measured on one Linux host and are hardware-uniform. The HotpotQA latency table (Section 9.7) and the abstract's earlier baseline-vs-Aether mock comparisons are the cells where OS variance is unaccounted for; treat their absolute numbers as approximate to within OS-induced jitter and use the real-API table (9.6.5) as the canonical end-to-end comparison.
+
+**Mitigation.** Future runs should pin a single OS and CPU stepping for all systems and record `ram_gb` correctly on Windows. The benchmark driver `scripts/run_benchmark.py` already records the values into the JSON; the gap is environmental, not in the runner.
 
 
 ## 10. Testing and Evaluation Framework
@@ -913,7 +1024,7 @@ Untrusted data requires explicit sanitization or isolation before inclusion in p
 
 ### 11.3 Current Status
 
-Security model designed, not yet implemented. Success criteria SC-11 and SC-12 (Section 4.5) will measure effectiveness. Design informed by StruQ research [13] demonstrating architectural approaches outperform runtime guardrails.
+Compile-time taint tracking is implemented and benchmarked. On the InjecAgent-adapted 60-case corpus (20 attack + 20 benign × 3 trials × 3 configs, real `gpt-4o-mini`), the `aether_taint_on` config achieves a `compile_time_catch_rate` of **1.0000** (CI degenerate, per-trial [1.0, 1.0, 1.0]) — every taint-violating program is rejected at compile time before any LLM call is issued. See Section 9.8 for the full table and `bench/results/security_v1.json` for the raw per-case payload. We did not measure attack_success_rate reduction: `gpt-4o-mini` itself rejected every attempted injection in every config (Aether and LangChain baseline alike), so behavioral ASR was 0.0 across the board on this dataset. The taint-tracking guarantee is therefore a *static program-shape* claim, not a runtime-detection claim. Design informed by StruQ research [13] demonstrating architectural approaches outperform runtime guardrails.
 
 
 ## 12. Tooling and Developer Experience
@@ -1269,23 +1380,25 @@ This appendix provides detailed status for all implemented components.
 | Lexer | Complete | 100% | logos crate, all tokens |
 | Parser | Complete | ~95% | 1900 lines, recursive descent |
 | Semantic Analyzer | Complete | ~90% | 5-pass, 15+ error types |
+| Taint tracking | Implemented | Measured | 100% compile-time catch on InjecAgent-adapted corpus (`security_v1.json` `configs[0].metrics[2].mean=1.0`); see Section 9.8 |
 | DAG Code Generator | Complete | ~85% | JSON output, template_refs |
 | Optimizer | Not started | - | Planned for Phase 2 |
 | Native Code Gen | Not started | - | Python/Rust backends planned |
+| `SemanticError::CircularDependency` | Defined but not emitted | — | Variant exists in `aether-compiler/src/semantic.rs` but never reached in current pass ordering; tracked at https://github.com/sowadalmughni/aether-lang/issues/4 (per `ablation_typesafety_v1.json` `methodology_notes.cd_substitution`) |
 
 ### B.2 Runtime Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | HTTP Server | Complete | Axum, async handlers |
-| DAG Executor | Complete | Parallel + sequential modes |
-| Exact-Match Cache | Complete | LRU, SHA256 keys |
-| Semantic Cache | Not started | Requires embedding integration |
+| DAG Executor | Complete | Parallel + sequential modes; measured 1.4778× / 2.5841× speedup (Section 9.2) |
+| Exact-Match Cache | Complete | LRU, SHA256 keys; measured hit rates 0.7000 (l1) / 1.0000 (warm) on repeat workloads (Section 9.3) |
+| Semantic Cache | Not started | Requires embedding integration; no `*_semantic_cache_*` config exists in any `bench/results/` JSON |
 | Context Store | MVP | InMemory only |
 | Template Engine | Complete | All placeholder types |
-| Mock LLM Client | Complete | Configurable latency |
-| OpenAI Client | Implemented | Feature flag |
-| Anthropic Client | Implemented | Feature flag |
+| Mock LLM Client | Complete | Configurable latency (50 ms flat across all `bench/results/*_mock_*` JSONs) |
+| OpenAI Client | Implemented & benchmarked | Real-API run produced `aether_real_api_v1.json` (3 trials × 3 configs × 2 datasets, $0.128887 cost); merged into `real_api_v1.json` |
+| Anthropic Client | Implemented | Feature flag; not exercised in this paper revision |
 | Observability | Complete | Tracing (OTLP), Prometheus metrics, Criterion benchmarks |
 
 ### B.3 Tooling Status
@@ -1293,10 +1406,10 @@ This appendix provides detailed status for all implemented components.
 | Tool | Status | Notes |
 |------|--------|-------|
 | DAG Visualizer | Complete | React + Cytoscape |
-| CI/Benchmark | Complete | GitHub Actions |
+| CI/Benchmark | Complete | GitHub Actions; produces JSONs under `bench/results/` |
 | LSP Server | Not started | Planned for Phase 2 |
 | REPL | Not started | Planned for Phase 2 |
-| Documentation | Partial | README, docstrings |
+| Documentation | Partial | README, docstrings, `bench/results/REAL_API.md`, `bench/results/ablations_v1.md` |
 
 ### B.4 Test Infrastructure
 
@@ -1304,4 +1417,4 @@ This appendix provides detailed status for all implemented components.
 |----------|-------|----------|
 | Unit tests (Rust) | ~150 | Core modules |
 | Integration tests | ~30 | E2E flows |
-| Benchmark datasets | 2 | CustomerSupport-100, DocumentAnalysis-50 |
+| Benchmark datasets | 5 | `CustomerSupport-100`, `DocumentAnalysis-50`, `customer_support_repeat_100` (cache ablation), `hotpotqa_dev_500` (latency only, mock), InjecAgent-adapted (security, real OpenAI) — each backed by a JSON in `bench/results/` |

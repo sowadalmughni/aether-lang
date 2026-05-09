@@ -1,8 +1,8 @@
 # Aether Whitepaper Changelog
 
-**Current Version**: 2.7  
-**Last Updated**: February 5, 2026  
-**Status**: Prototype - Phase 1-3 Complete, Approaching Beta Milestone
+**Current Version**: 3.0  
+**Last Updated**: May 8, 2026  
+**Status**: Prototype - Runtime, real-API, security suite all measured
 
 ---
 
@@ -10,6 +10,7 @@
 
 | Version | Date | Status | Summary |
 |---------|------|--------|---------|
+| 3.0 | May 8, 2026 | Measured-data revision | Runtime executed; every numeric claim now traces to a JSON in `bench/results/`; "(projected)" labels removed; Reproducibility callout, Statistical Methodology, HotpotQA + Security results, hardware-variance threat added |
 | 2.7 | Feb 5, 2026 | Telemetry & Benchmarks | OTLP tracing re-enabled, criterion benchmarks, OpenTelemetry 0.21.0 |
 | 2.6 | Feb 4, 2026 | Full Benchmark Suite | Synthetic datasets, benchmark runner, provider switching, CI integration |
 | 2.5 | Feb 4, 2026 | Benchmark Infrastructure | Latency percentiles, sequential mode, baseline stubs |
@@ -19,6 +20,81 @@
 | 2.1 | Feb 2026 | Phase 1 Complete | Parser, semantic analysis, code generator, CLI |
 | 2.0 | Feb 2026 | Major Revision | Research update, restructured whitepaper |
 | 1.0 | Jul 2025 | Initial Draft | Original whitepaper |
+
+---
+
+## [3.0] - May 8, 2026
+
+### Summary
+Major measured-data revision applied to **both** `WHITEPAPER.md` (formerly v2.7) and `WHITEPAPER_ACADEMIC.md` (formerly v3.1-academic, now v3.2-academic). Every "(projected)" label that was previously gated by a missing-runtime caveat is now replaced with a measurement traceable to a JSON file under `bench/results/`. The remaining "we did not measure X" disclaimers are explicit and labeled.
+
+### Added — bench/results/ artifacts cited by both papers
+- `bench/results/aether_mock_v1.json` — Aether mock-mode runs (5 trials × 3 configs × 2 datasets), Linux i5-8250U, git `4d16ec5cd5cb0957d7dc6408b5df25ba7befbe9b`, measured 2026-05-03
+- `bench/results/langchain_v1.json` — LangChain mock-mode runs (5 trials × 3 configs × 2 datasets), Windows i5 stepping, langchain 0.3.28, git `9591852f9ebb34822dc628197d47cb643c0ac381`, measured 2026-05-04
+- `bench/results/dspy_v1.json` — DSPy mock-mode runs (5 trials × 3 configs × 2 datasets), Windows i5 stepping, dspy 2.6.27, git `558df452e1e9c36d35bdbc474369862a631c458c`, measured 2026-05-08
+- `bench/results/aether_real_api_v1.json` — Aether real-OpenAI runs (3 trials × 3 configs × 2 datasets, gpt-4o-mini), Linux i5-8250U, git `9c8001ce269920c98fa733a82b3c69ea7352e37e`, cost $0.128887, measured 2026-05-08
+- `bench/results/langchain_real_api_v1.json` — LangChain real-OpenAI runs, langchain 0.3.28, cost $0.126498, measured 2026-05-08
+- `bench/results/dspy_real_api_v1.json` — DSPy real-OpenAI runs, dspy 2.6.27, cost $0.222963, measured 2026-05-08
+- `bench/results/real_api_v1.json` — merged real-API result with cost reconciliation, total cost **$0.478349** under $10.00 budget gate, schema `aether-real-api-v1`
+- `bench/results/REAL_API.md` — companion Markdown summary of the real-API run with verbatim merge-step output
+- `bench/results/ablation_cache_v1.json` — cache ablation: `no_cache` / `l1_exact_match` / `repeat_warm` × `customer_support_100` + `customer_support_repeat_100`, 5 trials each, git `8aee2cce5f969b5e2d84e94216355354dcc0eb7f`, measured 2026-05-08; produces 0.7000 hit rate (l1) and 1.0000 (warm) on the 70%-repeat workload, with paired BCa Δ p50 = −111.3 ms [−112.3, −108.8]
+- `bench/results/ablation_parallel_v1.json` — parallel ablation: `sequential` vs `parallel` × `customer_support_100` + `document_analysis_50`, 5 trials each, git `8aee2cce5f969b5e2d84e94216355354dcc0eb7f`, measured 2026-05-08; produces paired-trial speedup_p50 of 1.4778× [1.4728, 1.4849] and 2.5841× [2.5635, 2.5986]
+- `bench/results/ablation_typesafety_v1.json` — type-safety corpus: 30 cases × 4 buckets (10 type_mismatch + 10 undefined_reference + 5 missing_field + 5 duplicate_definition), git `8aee2cce5f969b5e2d84e94216355354dcc0eb7f`, measured 2026-05-08; produces Aether 30/30 caught at compile time, LangChain 17/30 caught at runtime + 13 missed silently, DSPy 17/30 caught at runtime + 13 missed silently
+- `bench/results/ablations_v1.md` — companion Markdown summary for the three ablations
+- `bench/results/security_v1.json` — InjecAgent-adapted prompt-injection corpus, 20 attack + 20 benign × 3 trials × 3 configs against real `gpt-4o-mini`, git `2759f1e7f5e26eb435f3c98951ea1fcf193f2b5e`, measured 2026-05-08, run cost $0.036912900000000005; produces compile_time_catch_rate = 1.0 (CI degenerate) for `aether_taint_on`, 0.0 for `aether_taint_off` and `langchain_baseline`, with attack_success_rate = 0.0 across all configs (model itself rejected the attacks)
+- `bench/results/hotpotqa_aether_v1.json` — Aether HotpotQA dev_500 latency (mock LLM, 3 trials), git `b581653a0611fdc3ddfbaf8af9553593a61cb585`, p50 mean 143.83 ms ± 0.29
+- `bench/results/hotpotqa_langchain_v1.json` — LangChain HotpotQA dev_500 latency (mock LLM, 3 trials), git `b581653a0611fdc3ddfbaf8af9553593a61cb585`, p50 mean 108.50 ms ± 0.85
+- `bench/results/hotpotqa_dspy_v1.json` — DSPy HotpotQA dev_500 latency (mock LLM, 3 trials), git `b581653a0611fdc3ddfbaf8af9553593a61cb585`, p50 mean 103.75 ms ± 0.18
+
+### Added — paper structure
+- `WHITEPAPER_ACADEMIC.md`: new Reproducibility callout (after Abstract), new Section 8.5 (Statistical Methodology), new Section 9.7 (HotpotQA Latency, mock-only with EM/F1 disclaimer), new Section 9.8 (Compile-Time Taint Tracking results), new Section 9.9.4 (Hardware variance threat to validity)
+- `WHITEPAPER.md`: new Reproducibility callout (after frontmatter), Section 8.4 fully replaced with measured-results table
+
+### Changed
+- `WHITEPAPER_ACADEMIC.md`:
+  - Abstract: `(projects 2.7x latency reduction)` → measured speedups 1.4778× and 2.5841× with paired BCa CIs and JSON cite; `(60% cache hit rate improvement)` → 0.7000 / 1.0000; LangChain 91.4 ms / DSPy 68.4 ms claims removed (no JSON source); contribution count updated 4 → 5 with explicit taint-tracking item
+  - Section 9.1 summary table: H1/H2/H3 cells replaced with measured outcomes plus a new H4 row for taint tracking; per-row JSON-field source column added
+  - Section 9.2 latency analysis: 274/103/58 ms table replaced with two per-dataset tables sourced from `ablation_parallel_v1.json` and the parallel_cached row from `aether_mock_v1.json`
+  - Section 9.3 caching performance: 60% / 18,240 / $0.91 row dropped (no JSON source); replaced with two per-dataset tables sourced from `ablation_cache_v1.json` plus an explicit "tokens_saved_total = 0.0 across every cache config" disclaimer
+  - Section 9.4 code complexity: stripped (no JSON source for the 253/287/283/312/78/111 cells; matched `.aether` sources for the case-study programs are not committed in the repo); replaced with an explicit "we did not measure" disclaimer
+  - Section 9.5 type safety: 50-case (15+12+10+13) table replaced with the actual 30-case corpus from `ablation_typesafety_v1.json`; added the cd→dd substitution methodology note verbatim
+  - Section 9.6.5 performance results: replaced with the real-OpenAI run from `aether_real_api_v1.json` and `real_api_v1.json`
+  - Section 9.7 (Threats to Validity) renumbered to 9.9; old 9.7.4 (MSVC toolchain) removed; new 9.9.4 documents hardware variance across measurement environments; 9.9.1 (Mock provider bias) updated to point at the real-API data as mitigation
+  - Section 11.3 (Security current status): "designed, not yet implemented" line replaced with the measured `compile_time_catch_rate=1.0` result and pointer to Section 9.8
+  - Appendix B.1 / B.2 / B.4: Taint tracking marked Implemented with cite; OpenAI Client moved to Implemented & benchmarked with `real_api_v1.json` cite; Benchmark datasets bumped 2 → 5 with each dataset paired with its JSON; CircularDependency variant flagged as defined-but-not-emitted with link to issue #4
+  - Section 1.1 contributions: contribution #4 augmented to mention real-API run; new contribution #5 for compile-time taint tracking with `security_v1.json` cite
+  - Frontmatter: version `3.1-academic` → `3.2-academic`, date `February 2026` → `May 2026`, status updated
+- `WHITEPAPER.md`:
+  - Section 8.1 closing line "No empirical results exist yet" replaced with pointer to `bench/results/` and Section 8.4
+  - Section 8.4 "Projected Results" → "Measured Results (3.0)" with full JSON-field map
+  - Section 1 closing line "All performance projections in this paper are theoretical" replaced with the post-3.0 truth
+  - Section 13.1 limitation "Performance claims are projections, not measurements" → updated to reflect 3.0 status
+  - Section 15.1 (Document History) "Performance claims remain theoretical projections" → updated to reflect 3.0 status
+  - Section 15.3 (Quarterly Review Checklist) "Update projections" → "re-run scripts and refresh JSONs"
+  - Frontmatter: version `2.7` → `3.0`, date `February 2026` → `May 2026`, status updated
+
+### Removed
+- All `(projected)` labels in `WHITEPAPER_ACADEMIC.md` Sections 9.1, 9.2, 9.3, and the Abstract
+- Section 9.7.4 (Aether runtime not executed / MSVC toolchain) — runtime did execute; threat is moot
+- Section 8.4 "Projected Results" caveat block in `WHITEPAPER.md` — superseded by measured table
+- Section 9.4 LOC table cells (253/287/283/312/78/111) — no JSON source; explicit disclaimer added in their place
+
+### Honest disclaimers (cells we did not measure, called out explicitly in both papers)
+- **Behavioral attack-success rate (ASR) reduction.** ASR is 0.0 in every config including the LangChain baseline because `gpt-4o-mini` itself rejected every attempted injection on this 60-case corpus. The differentiating measurement is therefore static `compile_time_catch_rate`, not behavioral ASR delta.
+- **HotpotQA accuracy (EM, F1).** Reported as 0.0 / 0.0 verbatim from the JSONs because the run uses a mock LLM. The latency numbers are meaningful; the accuracy numbers are not.
+- **Equivalent-functionality LOC for case-study programs.** The earlier 253/287/283/312/78/111 figures had no JSON source and matched `.aether` sources for the case studies are not committed; restoring this measurement is on the follow-up roadmap.
+- **Mock-mode token-savings dollar figures.** `tokens_saved_total = 0.0` across every cache config because the mock LLM does not populate `tokens_saved`. Real-API cost is reported in `real_api_v1.json`.
+
+### Acceptance verification
+```
+$ rg -n "projected" whitepaper/WHITEPAPER_ACADEMIC.md
+(no hits — all replaced or stripped)
+$ rg -n "projected" whitepaper/WHITEPAPER.md
+864:- We did not measure equivalent-functionality LOC. The earlier "60–70% / 40–50%" cells of the projected table came from an extrapolation; …
+(only the explicit "we did not measure" disclaimer remains)
+$ rg -n "\[MEASURED\]" whitepaper/WHITEPAPER_ACADEMIC.md whitepaper/WHITEPAPER.md
+(no hits)
+```
 
 ---
 

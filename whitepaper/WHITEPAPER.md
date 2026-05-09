@@ -1,12 +1,14 @@
 ---
 title: "Aether: A Domain-Specific Language for Type-Safe LLM Orchestration"
 author: "Md. Sowad Al-Mughni"
-date: "February 2026"
-version: "2.7"
-status: "Prototype - Phase 1-3 Complete, Approaching Beta Milestone"
+date: "May 2026"
+version: "3.0"
+status: "Prototype - Runtime, real-API, security suite all measured"
 ---
 
 <!-- toc -->
+
+> **Reproducibility (3.0).** Every numeric performance claim in this paper traces to a JSON file in `bench/results/`. The full inventory and the JSON-field map are in Section 8.4; the canonical files are `aether_mock_v1.json`, `langchain_v1.json`, `dspy_v1.json` (mock), `aether_real_api_v1.json`, `langchain_real_api_v1.json`, `dspy_real_api_v1.json`, `real_api_v1.json` (real OpenAI gpt-4o-mini), `ablation_cache_v1.json`, `ablation_parallel_v1.json`, `ablation_typesafety_v1.json`, `security_v1.json`, and `hotpotqa_{aether,langchain,dspy}_v1.json`. Markdown summaries live at `bench/results/REAL_API.md` and `bench/results/ablations_v1.md`. Reproduction: clone the repo at the commit listed in each JSON's `git_version` (or `version` for libraries), then invoke `scripts/run_benchmark.py` (mock) or `scripts/run_real_api_benchmark.sh` (OpenAI).
 
 ## 1. Executive Summary
 
@@ -14,7 +16,7 @@ Large language models are increasingly deployed in production systems, yet the e
 
 Aether is a domain-specific programming language designed to treat LLM orchestration as a first-class engineering discipline. The language introduces three core abstractions: `llm fn` for typed LLM interactions with explicit input/output schemas, `flow` for DAG-based workflow orchestration, and `context` for state management across interactions. The Aether compiler performs static analysis to verify type contracts, identify parallelization opportunities, and generate optimized execution plans.
 
-**Current Status**: Aether is in active prototype stage approaching the Beta milestone (July 2026). The Type System MVP, End-to-End Demo Loop, Runtime MVP, **Full Benchmark Suite**, and **Telemetry Integration** are complete. The lexer, parser, semantic analyzer, and code generator are fully implemented, producing DAG JSON output from Aether source files. The compiler CLI (`aetherc`) supports `compile`, `check`, `parse`, and `run` commands. The runtime implements dependency-aware parallel execution via topological sort and level-based JoinSet scheduling, exact-match LRU caching with tokens_saved tracking, template substitution (`{{context.KEY}}`, `{{node.ID.output}}`), error policies (Fail/Skip/Retry), and comprehensive observability (Prometheus metrics, **OTLP tracing with OpenTelemetry 0.21.0**). **Provider switching** is supported via the `AETHER_PROVIDER` environment variable (`mock|openai|anthropic`). **Criterion performance benchmarks** are now available for DAG execution profiling (`aether-runtime/benches/`). Semantic analysis includes comprehensive type checking with forward-only type inference, template variable validation, duplicate detection, call validation, return type verification, and cycle detection. Error messages include source locations and "Did you mean?" suggestions using Levenshtein distance. The DAG Visualizer features hierarchical layout using dagre.js with color-coded execution status. **Benchmark infrastructure is complete** with synthetic datasets (`bench/datasets/`), Python benchmark runner (`scripts/run_benchmark.py`), Criterion benchmarks, and CI integration (`.github/workflows/benchmark.yml`). All performance projections in this paper are theoretical and await empirical validation using this infrastructure.
+**Current Status**: Aether is in active prototype stage approaching the Beta milestone (July 2026). The Type System MVP, End-to-End Demo Loop, Runtime MVP, **Full Benchmark Suite**, and **Telemetry Integration** are complete. The lexer, parser, semantic analyzer, and code generator are fully implemented, producing DAG JSON output from Aether source files. The compiler CLI (`aetherc`) supports `compile`, `check`, `parse`, and `run` commands. The runtime implements dependency-aware parallel execution via topological sort and level-based JoinSet scheduling, exact-match LRU caching with tokens_saved tracking, template substitution (`{{context.KEY}}`, `{{node.ID.output}}`), error policies (Fail/Skip/Retry), and comprehensive observability (Prometheus metrics, **OTLP tracing with OpenTelemetry 0.21.0**). **Provider switching** is supported via the `AETHER_PROVIDER` environment variable (`mock|openai|anthropic`). **Criterion performance benchmarks** are now available for DAG execution profiling (`aether-runtime/benches/`). Semantic analysis includes comprehensive type checking with forward-only type inference, template variable validation, duplicate detection, call validation, return type verification, and cycle detection. Error messages include source locations and "Did you mean?" suggestions using Levenshtein distance. The DAG Visualizer features hierarchical layout using dagre.js with color-coded execution status. **Benchmark infrastructure is complete** with synthetic datasets (`bench/datasets/`), Python benchmark runner (`scripts/run_benchmark.py`), Criterion benchmarks, and CI integration (`.github/workflows/benchmark.yml`). **As of this revision (3.0), every numeric performance claim in the paper is anchored to a JSON file under `bench/results/`** (mock and real-OpenAI runs, three ablation suites, security suite, HotpotQA latency suite). See Section 8.4 for the per-metric JSON-field map and the explicit list of items we did not measure.
 
 **Key Contributions**:
 1. A type system that spans LLM inputs, outputs, and workflow compositions with compile-time verification
@@ -770,7 +772,7 @@ This section describes the evaluation methodology for validating Aether's claime
 - Sequential execution mode: `POST /execute?sequential=true` forces `max_concurrency=1`
 - Baseline stubs: `bench/baselines/langchain_baseline.py` and `bench/baselines/dspy_baseline.py`
 
-**No empirical results exist yet**. The benchmarks in this section remain projections based on theoretical analysis. The evaluation methodology is now fully executable using the implemented infrastructure.
+**Empirical results exist as of 3.0** and are committed to `bench/results/` as JSON files: mock-mode runs for all three systems, real-OpenAI run (`real_api_v1.json`, $0.478349 total cost across 3 systems), three ablation suites (cache, parallel, type-safety), an InjecAgent-adapted security suite (`security_v1.json`), and a HotpotQA latency suite (mock-only, accuracy not measured). Headline numbers and the JSON-field provenance are in Section 8.4 below.
 
 ### 8.2 Benchmark Suite Design
 
@@ -840,19 +842,27 @@ Each benchmark will compare:
 - Both output JSON in the same schema as Aether benchmark reports for direct comparison
 - Run in mock mode by default (no API keys required); set `BASELINE_PROVIDER=openai|anthropic` for real providers
 
-### 8.4 Projected Results
+### 8.4 Measured Results (3.0)
 
-Based on theoretical analysis and reported results from related systems:
+Every cell below is anchored to a JSON file in `bench/results/`; the field path is given alongside each metric. Cells follow `mean ± std [95% CI]` where applicable.
 
-| Metric | Python+LangChain | Python+DSPy | Aether (Projected) | Basis |
-|--------|------------------|-------------|-------------------|-------|
-| Latency (parallel workflow) | 100% (baseline) | ~100% | 60-70% | Static parallelization |
-| Cache hit rate | 10-20% (manual) | N/A | 40-60% | Compiler-assisted |
-| API cost | 100% (baseline) | 75-85% | 50-70% | Caching + batching |
-| Schema errors | 5-15% runtime | 3-10% | <1% compile-time | Static typing |
-| Lines of code | 100% (baseline) | 60-70% | 40-50% | DSL conciseness |
+| Metric | Aether (measured) | Source |
+|---|---|---|
+| Parallel speedup, `customer_support_100` | **1.4778× [1.4728, 1.4849]** (paired BCa) | `ablation_parallel_v1.json` `results[2].speedup.speedup_p50` |
+| Parallel speedup, `document_analysis_50` | **2.5841× [2.5635, 2.5986]** (paired BCa) | `ablation_parallel_v1.json` `results[5].speedup.speedup_p50` |
+| Cache hit rate (`l1_exact_match`, repeat workload) | **0.7000** (CI degenerate) | `ablation_cache_v1.json` `results[5].cache_hit_rate.mean` |
+| Cache hit rate (`repeat_warm`, repeat workload) | **1.0000** (CI degenerate) | `ablation_cache_v1.json` `results[6].cache_hit_rate.mean` |
+| Δ p50 (warm vs no-cache, repeat workload) | **−111.3 ms [−112.3, −108.8]** | `ablation_cache_v1.json` `results[7].cross_mode_deltas.latency_p50_delta_warm_vs_no_cache` |
+| Type errors caught at compile time | **30 of 30 (100.00%)** vs LangChain 17/30 + 13 missed silently, DSPy 17/30 + 13 missed silently | `ablation_typesafety_v1.json` `summary.{aether_caught, lc_caught_at_runtime, lc_missed_silently, dspy_*}` |
+| Compile-time taint catch rate (InjecAgent-adapted) | **1.0 (CI degenerate)** for `aether_taint_on`, **0.0** for `aether_taint_off` and `langchain_baseline` | `security_v1.json` `configs[*].metrics[2]` (`compile_time_catch_rate`) |
+| Real-API end-to-end cost (gpt-4o-mini, both datasets, 3 trials per config) | **$0.128887** Aether, **$0.126498** LangChain, **$0.222963** DSPy, **$0.478349** total | `real_api_v1.json` `per_system.*.cost_usd` |
 
-**Caveat**: These projections assume successful implementation of all planned features. Actual results may differ significantly.
+**Honest disclaimers** (the corollary to "every number traces to JSON"):
+
+- We did not measure ASR reduction. Behavioral attack-success rate is 0.0 in every config including LangChain baseline because `gpt-4o-mini` itself rejected every InjecAgent-adapted attack on this corpus. The static `compile_time_catch_rate` is the only differentiating measurement; treat it as a *program-shape* claim, not a runtime-detection claim.
+- We did not measure HotpotQA accuracy. The HotpotQA benchmark was run with a mock LLM (`hotpotqa_*_v1.json`, EM=0.0, F1=0.0 verbatim across all three systems); only per-question latency is meaningful from those files.
+- We did not measure equivalent-functionality LOC. The earlier "60–70% / 40–50%" cells of the projected table came from an extrapolation; matched `.aether` case-study sources for `customer_support_triage` and `document_analysis_pipeline` are not committed in the repo at the commits in the Reproducibility section, so a 6-cell LOC table cannot be reconstructed from JSON. Restoring this measurement is on the follow-up roadmap.
+- Mock-mode token-savings cost dollar figures (the earlier "API cost 50–70%" cell): `tokens_saved_total = 0.0` across every cache config in `ablation_cache_v1.json` because the mock LLM does not populate the `tokens_saved` field. Real-API cost in `real_api_v1.json` is the load-bearing cost figure.
 
 ### 8.5 Criterion Native Benchmarks (v2.7)
 
@@ -1322,9 +1332,9 @@ Web-based dashboard for monitoring production deployments:
 ### 13.1 Current Limitations
 
 **Implementation limitations**:
-- Most features described in this paper are not yet implemented
-- Performance claims are projections, not measurements
-- The evaluation methodology has not been executed
+- Compiler core (lexer, parser, semantic analyzer, DAG codegen, taint tracking) is implemented; native code generation and an optimizer pass are not yet implemented (Phase 2 roadmap)
+- Performance claims are measured as of 3.0 (see Section 8.4 / `bench/results/`); the paper now anchors every numeric cell to a JSON file. Items we did not measure (LOC, real-LLM HotpotQA accuracy, ASR reduction on this corpus/model) are explicitly listed in Section 8.4
+- The evaluation methodology has been executed end-to-end on both mock and real OpenAI providers; the JSON outputs are committed at `bench/results/`
 
 **Design limitations**:
 - Learning curve for a new language
@@ -1384,7 +1394,7 @@ Aether proposes a language-level approach to LLM integration, addressing the typ
 
 The design draws on validated approaches: DSPy's declarative signatures, BAML's compile-time type generation, Temporal's durable execution patterns, and StruQ's architectural security. Aether aims to synthesize these into a coherent language where LLM orchestration is a first-class concern.
 
-As of February 2026, Aether has completed Phase 1 of development. The compiler now parses all language constructs, performs semantic analysis with symbol resolution and LLM function validation, and generates DAG JSON with machine-readable `template_refs` metadata. This metadata enables runtime substitution, security policy enforcement, and cache key computation--following the principle that placeholders should be preserved for runtime rather than resolved at compile time. The CLI (`aetherc`) provides `compile`, `check`, and `parse` commands. Performance claims remain theoretical projections pending empirical validation.
+As of May 2026, Aether has completed Phase 1 of development. The compiler now parses all language constructs, performs semantic analysis with symbol resolution and LLM function validation, and generates DAG JSON with machine-readable `template_refs` metadata. This metadata enables runtime substitution, security policy enforcement, and cache key computation--following the principle that placeholders should be preserved for runtime rather than resolved at compile time. The CLI (`aetherc`) provides `compile`, `check`, and `parse` commands. Performance claims are now empirically backed: every numeric assertion in this paper traces to a JSON artifact in `bench/results/` (see Section 8.4 and the per-system real-OpenAI run in `real_api_v1.json`). Items we did not measure (matched-functionality LOC, real-LLM HotpotQA accuracy, behavioral ASR reduction on this corpus/model) are listed explicitly alongside the measurements they accompany.
 
 The roadmap targets a feature-complete beta in late 2026 and production release in 2027. Success will depend on executing the remaining implementation plan (optimizer, caching, security features), demonstrating measurable improvements over existing tools, and building a community around the language.
 
@@ -1421,7 +1431,7 @@ As the AI landscape evolves, review quarterly:
 - [ ] Related Work: New frameworks, tools, or papers (LangChain, DSPy, BAML releases)
 - [ ] Provider APIs: New structured output modes, caching features
 - [ ] Security: OWASP updates, new prompt injection research
-- [ ] Benchmarks: Update projections if implementation progresses
+- [ ] Benchmarks: re-run `scripts/run_benchmark.py` and `scripts/run_real_api_benchmark.sh` if the runtime, compiler, or baseline versions change; refresh JSONs under `bench/results/`
 - [ ] Implementation status: Update based on development progress
 - [ ] Citations: Verify URLs remain accessible
 

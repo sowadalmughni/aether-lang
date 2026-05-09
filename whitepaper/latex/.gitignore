@@ -1,0 +1,15 @@
+# Build artefacts produced by `make tex` / `make pdf`.
+# Tracked LaTeX source: aether-template.tex (none yet), arxiv.sty,
+# header.tex, preprocess_md.py, references.bib.
+# Generated and committed: aether.tex, aether.pdf (committed for arXiv).
+# Intermediate / scratch (ignored):
+aether.preprocessed.md
+aether.aux
+aether.log
+aether.out
+aether.toc
+aether.bbl
+aether.blg
+aether.fdb_latexmk
+aether.fls
+aether.synctex.gz

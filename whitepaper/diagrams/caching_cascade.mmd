@@ -1,0 +1,11 @@
+graph TD
+    A[Incoming LLM Request] --> B{Exact-Match Cache}
+    B -->|Hit| G[Return Cached Response]
+    B -->|Miss| C{Semantic Cache}
+    C -->|Hit| G
+    C -->|Miss| D{Provider Prefix Cache}
+    D -->|Hit| E[Reduced-Cost API Call]
+    D -->|Miss| F[Full API Call]
+    E --> G
+    F --> G
+    G --> H[Update Caches]

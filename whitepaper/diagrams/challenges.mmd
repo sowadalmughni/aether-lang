@@ -1,0 +1,21 @@
+graph TD
+    A[LLM Integration Challenges] --> B[Type Safety Gap]
+    A --> C[Orchestration Complexity]
+    A --> D[Testing Deficit]
+    A --> E[Cost and Latency]
+    A --> F[Security Surface]
+
+    B --> B1[Runtime-only schema validation]
+    B --> B2[No cross-step type checking]
+
+    C --> C1[Runtime workflow construction]
+    C --> C2[No static optimization]
+
+    D --> D1[Separate test infrastructure]
+    D --> D2[No schema-test alignment]
+
+    E --> E1[Manual caching implementation]
+    E --> E2[Missed optimization opportunities]
+
+    F --> F1[Runtime guardrails only]
+    F --> F2[No compile-time taint tracking]

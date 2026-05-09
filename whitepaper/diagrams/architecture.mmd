@@ -1,0 +1,30 @@
+graph TB
+    subgraph "Aether Language Constructs"
+        A[llm fn] --> D[Flow]
+        B[context] --> D
+        C[fn] --> D
+        E[test] --> F[Evaluation]
+    end
+
+    subgraph "Aether Compiler"
+        G[Lexer] --> H[Parser]
+        H --> I[AST]
+        I --> J[Semantic Analysis]
+        J --> K[IR Generation]
+        K --> L[Optimization]
+        L --> M[Code Generation]
+    end
+
+    subgraph "Aether Runtime"
+        N[Execution Engine]
+        O[Caching Layer]
+        P[Context Manager]
+        Q[Observability]
+    end
+
+    D --> G
+    F --> G
+    M --> N
+    N --> O
+    N --> P
+    N --> Q

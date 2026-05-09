@@ -39,6 +39,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # 3. pnpm pinned to the version recorded in aether-dag-visualizer/package.json.
 RUN npm install -g pnpm@${PNPM_VERSION}
 
+# 3a. mermaid-cli for whitepaper/diagrams/render.sh. Pinned to 10.9.x so the
+#     diagram PDFs in whitepaper/latex/figures/ are byte-stable across rebuilds
+#     (mermaid 11.x changes default-theme rendering enough to alter output).
+RUN npm install -g @mermaid-js/mermaid-cli@10.9.x
+
 # 4. Defensive: ensure clippy/rustfmt are present even if upstream image strips them.
 RUN rustup component add clippy rustfmt
 

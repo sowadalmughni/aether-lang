@@ -1,11 +1,9 @@
 # Aether Programming Language
 
-[![Build Status](https://github.com/aether-lang/aether/workflows/CI/badge.svg)](https://github.com/aether-lang/aether/actions)
-[![Documentation](https://img.shields.io/badge/docs-rustdoc-blue)](https://aether-lang.github.io/aether/rustdoc/aether_runtime/)
+[![CI](https://github.com/aether-lang/aether/actions/workflows/ci.yml/badge.svg)](https://github.com/aether-lang/aether/actions/workflows/ci.yml)
+[![Benchmarks](https://github.com/aether-lang/aether/actions/workflows/benchmark.yml/badge.svg)](https://github.com/aether-lang/aether/actions/workflows/benchmark.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Reproducible Artifacts](https://img.shields.io/badge/Artifacts-Reproducible-green)](https://github.com/aether-lang/aether/blob/main/Dockerfile)
-[![DAG Visualizer](https://img.shields.io/badge/Demo-DAG_Visualizer-purple)](https://aether-lang.github.io/aether/)
-[![Benchmarks](https://img.shields.io/badge/Benchmarks-Nightly-orange)](https://github.com/aether-lang/aether/actions/workflows/benchmark.yml)
+[![Reproducible Artifacts](https://img.shields.io/badge/Artifacts-Reproducible-green)](Dockerfile)
 
 A programming language designed for efficient, reliable, and scalable Large Language Model (LLM) integration.
 
@@ -13,41 +11,38 @@ A programming language designed for efficient, reliable, and scalable Large Lang
 
 Aether transforms LLM integration from fragile scripting into robust, engineered systems. By providing first-class abstractions for LLM orchestration, intelligent caching, and type-safe prompt management, Aether enables developers to build production-grade AI applications with confidence.
 
-**Current Status**: Prototype v2.7 - Phase 1-3 Complete, Approaching Beta Milestone
+**Current Status**: v3.0 — measured-data revision. Every benchmark claim previously labelled "projected" now resolves to a JSON file under [`bench/results/`](bench/results/). Whitepaper version: v3.2-academic ([`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md), PDF at [`whitepaper/latex/aether.pdf`](whitepaper/latex/aether.pdf)).
 
 ### Key Features
 
-- **🔧 Type-Safe LLM Functions**: Define LLM interactions with structured inputs and outputs ✓
-- **🌊 Declarative Flows**: Orchestrate complex LLM workflows with DAG-based execution ✓
-- **⚡ Intelligent Caching**: Exact-match LRU cache with tokens_saved tracking ✓
-- **🛡️ Security-First**: Prompt injection detection with pattern-based filtering ✓
-- **📊 Observability**: Prometheus metrics, OpenTelemetry tracing, latency percentiles ✓
-- **🔄 Reproducible**: Deterministic builds with benchmark infrastructure ✓
+- 🔧 **Type-Safe LLM Functions**: 30/30 intentionally malformed programs caught at compile time vs 17/30 by LangChain and DSPy — [`bench/results/ablation_typesafety_v1.json`](bench/results/ablation_typesafety_v1.json)
+- 🌊 **Declarative Flows**: DAG-based execution with level-parallel scheduling
+- ⚡ **Intelligent Caching**: L1 hit rate 0.7000 on 70%-repeat workloads, 1.0000 warm-cache — [`bench/results/ablation_cache_v1.json`](bench/results/ablation_cache_v1.json)
+- 🛡️ **Security**: 100% compile-time catch rate on 60-case InjecAgent-adapted corpus — [`bench/results/security_v1.json`](bench/results/security_v1.json)
+- 🚀 **Parallel DAG Execution**: 1.4778× and 2.5841× measured speedup vs sequential on synthetic benchmarks — [`bench/results/ablation_parallel_v1.json`](bench/results/ablation_parallel_v1.json)
+- 📊 **Observability**: Prometheus metrics, OpenTelemetry tracing, latency percentiles (p50/p95/p99)
+- 🔄 **Reproducible**: Single-command `bash reproduce.sh` + Dockerized build — see [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
 
 ## 📖 Quick Start
 
+The recommended path is Docker — single command, no host toolchain setup, mirrors CI.
+
 ### Prerequisites
 
-- Rust 1.75.0 or later
-- Node.js 20.x or later (for DAG Visualizer)
-- Python 3.9+ (for baseline benchmarks)
+- Docker 24+ (Engine or Desktop)
 
-### Installation
+### Build, run the runtime, and run the benchmark
 
 ```bash
-# Clone the repository
 git clone https://github.com/aether-lang/aether.git
 cd aether
-
-# Build the compiler and runtime
-cargo build --release
-
-# Start the runtime server (default: http://127.0.0.1:3000)
-cd aether-runtime && cargo run --release
-
-# In another terminal, compile and run an Aether program
-cd aether-compiler && cargo run --release -- run ../examples/hello.aether
+docker build -t aether .
+docker compose up --build runtime          # runtime on :3000
+docker compose run --rm bench              # mock-mode benchmark, JSON to bench/results/
+docker compose down
 ```
+
+For native Linux instructions and trade-offs see [`docs/BUILD.md`](docs/BUILD.md). Native Windows (MSVC) is not supported — use WSL2 or Docker Desktop.
 
 ### Example: Customer Support Agent
 
@@ -122,16 +117,27 @@ flow handle_support_query(query: string) -> string {
 ### DAG Visualizer (`aether-dag-visualizer/`)
 - **Status**: ✅ Implemented
 - **Features**: Hierarchical layout (dagre.js), drag-and-drop file loading, execution status colors
-- **Demo**: [Live Demo](https://aether-lang.github.io/aether/)
 
 ### Benchmark Suite (`bench/`)
 - **Status**: ✅ Infrastructure Implemented
-- **Baselines**: LangChain and DSPy simulation stubs with mock mode
-- **Harness**: lm-evaluation-harness integration
+- **Baselines**: Real LangChain (0.3.28) and DSPy (2.6.27) baseline scripts; mock and real-provider modes (see [`bench/baselines/README.md`](bench/baselines/README.md))
 
 ## 📊 Performance
 
-### Benchmark Infrastructure (Implemented)
+### Measured Results
+
+Every row below has a JSON source file in [`bench/results/`](bench/results/). Reproduce with `bash reproduce.sh` (mock mode, ~95–110 min on the reference hardware in [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)).
+
+| Metric | Aether | Baseline | Source |
+|--------|--------|----------|--------|
+| **Type-safety catch rate** | 30/30 (100%) compile time | LangChain 17/30 runtime, DSPy 17/30 runtime | [ablation_typesafety_v1.json](bench/results/ablation_typesafety_v1.json) |
+| **L1 cache hit rate** (70%-repeat workload) | 0.7000 | n/a | [ablation_cache_v1.json](bench/results/ablation_cache_v1.json) |
+| **L1 cache hit rate** (warm) | 1.0000 | n/a | [ablation_cache_v1.json](bench/results/ablation_cache_v1.json) |
+| **Compile-time security catch** (60 InjecAgent-adapted cases) | 100% | n/a | [security_v1.json](bench/results/security_v1.json) |
+| **Parallel speedup**, customer_support_100 (p50) | 1.4778× | 1.0× sequential | [ablation_parallel_v1.json](bench/results/ablation_parallel_v1.json) |
+| **Parallel speedup**, document_analysis_50 (p50) | 2.5841× | 1.0× sequential | [ablation_parallel_v1.json](bench/results/ablation_parallel_v1.json) |
+
+### Benchmark Infrastructure
 
 The runtime provides server-side measurement for reproducible benchmarking:
 
@@ -144,9 +150,10 @@ The runtime provides server-side measurement for reproducible benchmarking:
 
 ### Baseline Comparisons
 
-Baseline stubs in `bench/baselines/` allow direct comparison with:
-- **LangChain pattern**: Sequential execution, 15% cache hit simulation
-- **DSPy pattern**: Module-based composition, no caching
+Baselines in [`bench/baselines/`](bench/baselines/) use real, pinned packages — not simulations:
+
+- **LangChain pattern**: real `langchain` 0.3.28, LCEL chains + `InMemoryCache` (LRU exact-match)
+- **DSPy pattern**: real `dspy` 2.6.27, `Module` + `Predict` + `ChainOfThought`
 
 ```bash
 # Run baseline benchmarks (mock mode, no API keys needed)
@@ -154,25 +161,15 @@ python bench/baselines/langchain_baseline.py --requests 100
 python bench/baselines/dspy_baseline.py --requests 100
 ```
 
-### Projected Results
-
-| Metric | Python+LangChain | Aether (Projected) | Basis |
-|--------|------------------|-------------------|-------|
-| **Latency (parallel)** | 100% (baseline) | 60-70% | Static parallelization |
-| **Cache hit rate** | 10-20% (manual) | 40-60% | Compiler-assisted |
-| **Schema errors** | 5-15% runtime | <1% | Compile-time typing |
-
-*Note: These are projected benchmarks. Empirical validation infrastructure is implemented.*
-
 ## 🔒 Security Features
 
 **Implemented:**
-- **Prompt Injection Detection**: Pattern-based detection of jailbreak attempts (DAN mode, ignore instructions, etc.)
-- **InputSanitizer Trait**: Pluggable sanitization strategies
-- **Blacklist Patterns**: Configurable pattern matching for malicious prompts
+- **Compile-time taint tracking**: untrusted-input isolation enforced by the compiler (100% catch rate on the 60-case InjecAgent-adapted corpus, [`security_v1.json`](bench/results/security_v1.json))
+- **Prompt Injection Detection**: pattern-based detection of jailbreak attempts (DAN mode, ignore instructions, etc.)
+- **InputSanitizer Trait**: pluggable sanitization strategies
+- **Blacklist Patterns**: configurable pattern matching for malicious prompts
 
 **Planned:**
-- Compile-time taint tracking for untrusted input isolation
 - Integration with profanity filtering APIs
 - Declarative guardrail annotations (`@input_guard`, `@output_guard`)
 - Tool access control with explicit permission grants
@@ -200,19 +197,28 @@ curl -X POST "http://localhost:3000/execute?sequential=true" -d @dag.json
 cargo doc --workspace --no-deps
 ```
 
+## 🔁 Reproducing the paper's numbers
+
+```bash
+bash reproduce.sh
+```
+
+Mock-mode reproduction takes ~95–110 minutes on the reference hardware (Intel i5-8250U, 8 GB RAM, Ubuntu 24.04). Output JSONs are written to `bench/results/repro/` and diffed against the committed reference set; the diff report is `bench/results/repro/DIFF_REPORT.md`. Real-API JSONs (`security_v1.json`, `*_real_api_v1.json`) require `OPENAI_API_KEY` and incur cost; reproduction instructions for those are in [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) §6.
+
 ## 📈 Roadmap
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **Phase 1: Core Compiler** | ✅ Complete | Parser, semantic analysis, type checking, DAG generation |
 | **Phase 2: Runtime MVP** | ✅ Complete | Parallel execution, caching, template engine, observability |
-| **Phase 2.5: Benchmarks** | ✅ Complete | Latency percentiles, sequential mode, baseline stubs, criterion benchmarks |
+| **Phase 2.5: Benchmarks** | ✅ Complete | Latency percentiles, sequential mode, baseline harness, criterion benchmarks |
 | **Phase 2.7: Telemetry** | ✅ Complete | OTLP tracing re-enabled, OpenTelemetry 0.21.0 integration |
-| **Phase 3: Advanced Caching** | 🔄 In Progress | Semantic cache, provider prefix caching |
-| **Phase 4: IDE Tooling** | 📋 Planned | VS Code extension, LSP support |
-| **Phase 5: Production** | 📋 Planned | Multi-level caching, guardrails, taint tracking |
+| **Phase 3: Measurement & Whitepaper (v3.0 / v3.2-academic)** | ✅ Complete | End-to-end measured ablations, real-API runs, reproducibility pipeline |
+| **Phase 4: Advanced Caching** | 🔄 In Progress | Semantic cache, provider prefix caching |
+| **Phase 5: IDE Tooling** | 📋 Planned | VS Code extension, LSP support |
+| **Phase 6: Production** | 📋 Planned | Multi-level caching, expanded guardrails, broader taint coverage |
 
-See [roadmap.gantt.yml](roadmap.gantt.yml) and [whitepaper](whitepaper/WHITEPAPER.md) for details.
+See [roadmap.gantt.yml](roadmap.gantt.yml) and [`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md) for details.
 
 ## 🤝 Contributing
 
@@ -224,10 +230,9 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 # Using Docker (recommended)
 docker build -t aether .
 docker run -p 3000:3000 -p 5173:5173 aether
-
-# Or local development
-./scripts/setup-dev.sh
 ```
+
+For native Linux setup (rustup, Node 20, pnpm 10.4.1, Python venv, build/test/lint commands) see [`docs/BUILD.md`](docs/BUILD.md).
 
 ## 📄 License
 
@@ -236,20 +241,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Built with [React Flow](https://reactflow.dev/) for visualization
-- Benchmarking powered by [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
 - Security patterns inspired by [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
+- Security corpus adapted from [InjecAgent](https://github.com/uiuc-kang-lab/InjecAgent) (see `bench/security/data/` for the vendored subset)
 
 ## 📚 Resources
 
-- **Whitepaper**: [Aether: A Domain-Specific Language for Type-Safe LLM Orchestration](whitepaper/WHITEPAPER.md)
-- **Changelog**: [Version History](whitepaper/CHANGELOG.md)
-- **API Documentation**: [Rustdoc](https://aether-lang.github.io/aether/rustdoc/)
-- **Live Demo**: [DAG Visualizer](https://aether-lang.github.io/aether/)
-- **Baseline Benchmarks**: [bench/baselines/README.md](bench/baselines/README.md)
+- **Paper (publication version)**: [`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md) or compiled PDF at [`whitepaper/latex/aether.pdf`](whitepaper/latex/aether.pdf)
+- **Engineering reference**: [`whitepaper/WHITEPAPER.md`](whitepaper/WHITEPAPER.md)
+- **Reproducibility**: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
+- **Build instructions**: [`docs/BUILD.md`](docs/BUILD.md)
+- **Baseline benchmarks**: [`bench/baselines/README.md`](bench/baselines/README.md)
+- **Changelog**: [`whitepaper/CHANGELOG.md`](whitepaper/CHANGELOG.md)
 
 ---
 
 <div align="center">
   <strong>Transforming LLM Integration, One Flow at a Time</strong>
 </div>
-

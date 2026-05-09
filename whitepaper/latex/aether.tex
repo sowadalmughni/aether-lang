@@ -500,6 +500,13 @@ prompts across an entire workflow.
 \subsubsection{2.6 Why a Language-Level
 Approach}\label{why-a-language-level-approach}
 
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{figures/challenges.pdf}
+  \caption{Current LLM integration challenges: five problem areas (type safety, orchestration, testing, cost/latency, security) and the runtime-only mechanisms that address each.}
+  \label{fig:challenges}
+\end{figure}
+
 These problems share a common root: LLM integration occurs at runtime,
 in strings, without static verification. A domain-specific language can
 address this by moving verification earlier, enabling whole-program
@@ -797,6 +804,13 @@ approaches outperform runtime guardrails.
 
 \subsection{5. Language Design}\label{language-design}
 
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{figures/architecture.pdf}
+  \caption{Aether language architecture: language constructs feed the compiler pipeline, which targets the runtime's execution, caching, context, and observability layers.}
+  \label{fig:architecture}
+\end{figure}
+
 Aether is a statically-typed, domain-specific language for LLM
 orchestration. This section presents the core abstractions and their
 semantics. The formal grammar is provided in Appendix A.
@@ -970,6 +984,13 @@ This section describes the Aether compiler pipeline. All compiler phases
 detailed component status.
 
 \subsubsection{6.1 Compiler Pipeline}\label{compiler-pipeline}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{figures/compiler_pipeline.pdf}
+  \caption{Aether compiler pipeline. Lexer, parser, semantic analyzer, and code generator are implemented; the optimizer is planned and the runtime is partial (see \S6.2 for the status table).}
+  \label{fig:compiler-pipeline}
+\end{figure}
 
 \paragraph{6.1.1 Lexical Analysis}\label{lexical-analysis}
 
@@ -1196,6 +1217,13 @@ The execution engine provides:
 \end{itemize}
 
 \subsubsection{7.2 Caching Layer}\label{caching-layer}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{figures/caching_cascade.pdf}
+  \caption{Multi-level caching cascade. Level 1 (exact-match) is implemented; semantic and provider-prefix caches are planned.}
+  \label{fig:caching-cascade}
+\end{figure}
 
 A multi-level caching system:
 
@@ -2801,6 +2829,13 @@ implementations require:
 generation for Python/Rust is planned.
 
 \subsubsection{14.2 Future Work}\label{future-work}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{figures/roadmap.pdf}
+  \caption{Aether development roadmap (Gantt). Foundation and core compiler tasks are in progress; runtime features, tooling, and production readiness extend through 2027.}
+  \label{fig:roadmap}
+\end{figure}
 
 \textbf{Short-term (Q1 2026)}:
 

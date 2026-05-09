@@ -177,6 +177,65 @@ FIGURE_INJECTIONS: dict[str, list[tuple[str, str, str]]] = {
     ],
 }
 
+# Diagram figures rendered from whitepaper/diagrams/*.mmd via mermaid-cli
+# (whitepaper/diagrams/render.sh writes the PDFs into latex/figures/). Unlike
+# measurement figures, these have no JSON sidecar — captions are inline below
+# because the diagrams are conceptual and the prose around the heading already
+# provides their semantic context.
+#
+# Schema: heading -> [(stem, label, position, caption), ...]
+DIAGRAM_INJECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
+    "### 2.6 Why a Language-Level Approach": [
+        (
+            "challenges",
+            "fig:challenges",
+            "tb",
+            "Current LLM integration challenges: five problem areas "
+            "(type safety, orchestration, testing, cost/latency, security) "
+            "and the runtime-only mechanisms that address each.",
+        ),
+    ],
+    "## 5. Language Design": [
+        (
+            "architecture",
+            "fig:architecture",
+            "tb",
+            "Aether language architecture: language constructs feed the "
+            "compiler pipeline, which targets the runtime's execution, "
+            "caching, context, and observability layers.",
+        ),
+    ],
+    "### 6.1 Compiler Pipeline": [
+        (
+            "compiler_pipeline",
+            "fig:compiler-pipeline",
+            "tb",
+            "Aether compiler pipeline. Lexer, parser, semantic analyzer, "
+            "and code generator are implemented; the optimizer is planned "
+            "and the runtime is partial (see \\S6.2 for the status table).",
+        ),
+    ],
+    "### 7.2 Caching Layer": [
+        (
+            "caching_cascade",
+            "fig:caching-cascade",
+            "tb",
+            "Multi-level caching cascade. Level 1 (exact-match) is "
+            "implemented; semantic and provider-prefix caches are planned.",
+        ),
+    ],
+    "### 14.2 Future Work": [
+        (
+            "roadmap",
+            "fig:roadmap",
+            "tb",
+            "Aether development roadmap (Gantt). Foundation and core compiler "
+            "tasks are in progress; runtime features, tooling, and production "
+            "readiness extend through 2027.",
+        ),
+    ],
+}
+
 
 # LaTeX-special characters that survive the sidecar JSON unchanged but must
 # be escaped before being dropped into a \caption{...}. The sidecar captions
@@ -217,6 +276,38 @@ def _render_figure_block(stem: str, label: str, position: str) -> str:
         f"\\begin{{figure}}[{position}]\n"
         f"  \\centering\n"
         f"  \\includegraphics[width=\\linewidth]{{figures/{stem}.pdf}}\n"
+        f"  \\caption{{{caption}}}\n"
+        f"  \\label{{{label}}}\n"
+        f"\\end{{figure}}\n"
+    )
+
+
+def _render_diagram_block(stem: str, label: str, position: str, caption: str) -> str:
+    """
+    Render a figure environment for a mermaid-derived diagram. The PDF is
+    expected to exist under whitepaper/latex/figures/<stem>.pdf, produced by
+    whitepaper/diagrams/render.sh.
+
+    Mermaid's default-theme PDF output is sized to the diagram's bounding box
+    rather than to a fixed page. Several of our diagrams (architecture,
+    compiler_pipeline, caching_cascade) render taller than wide; scaling them
+    to \\linewidth alone overflows the page and pushes the caption out of
+    sight. We clamp both width and height with keepaspectratio so the figure
+    always fits with its caption on the same page.
+    """
+    pdf = _FIGURES_DIR / f"{stem}.pdf"
+    if not pdf.is_file():
+        raise FileNotFoundError(
+            f"diagram PDF missing: {pdf} (run whitepaper/diagrams/render.sh)"
+        )
+    # Diagram captions are author-curated above and may carry hand-written
+    # LaTeX (e.g. \\S6.2). Pass them through as-is.
+    return (
+        "\n"
+        f"\\begin{{figure}}[{position}]\n"
+        f"  \\centering\n"
+        f"  \\includegraphics[width=\\linewidth,height=0.78\\textheight,keepaspectratio]"
+        f"{{figures/{stem}.pdf}}\n"
         f"  \\caption{{{caption}}}\n"
         f"  \\label{{{label}}}\n"
         f"\\end{{figure}}\n"
@@ -300,6 +391,11 @@ def preprocess(text: str) -> str:
         if injections is not None:
             for stem, label, position in injections:
                 out.append(_render_figure_block(stem, label, position))
+        # Same for mermaid-derived diagram figures.
+        diagram_injections = DIAGRAM_INJECTIONS.get(line.rstrip())
+        if diagram_injections is not None:
+            for stem, label, position, caption in diagram_injections:
+                out.append(_render_diagram_block(stem, label, position, caption))
         i += 1
 
     return "\n".join(out) + "\n"

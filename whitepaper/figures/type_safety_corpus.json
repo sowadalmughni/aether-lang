@@ -1,0 +1,384 @@
+{
+  "figure": "type_safety_corpus",
+  "caption": "Type-safety bug-detection outcome by class (n=10/10/5/5). Aether catches 30 cases at compile time; LangChain and DSPy catch 17 at runtime via Python exceptions and miss 13 silently. Methodology note: the original 'circular_dependency' bucket was substituted with 'duplicate_definition' due to a compiler pass-ordering gap (SemanticError::CircularDependency is defined but preempted by other semantic-analysis errors) (full text in ablation_typesafety_v1.json#methodology_notes.cd_substitution). Source: ablation_typesafety_v1.json.",
+  "sources": [
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.aether_caught",
+      "system": "Aether",
+      "bucket": "type_mismatch",
+      "segment": "compile",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; Aether has no runtime segment)",
+      "system": "Aether",
+      "bucket": "type_mismatch",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total - summary.by_bucket.type_mismatch.aether_caught",
+      "system": "Aether",
+      "bucket": "type_mismatch",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total",
+      "bucket": "type_mismatch",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.aether_caught",
+      "system": "Aether",
+      "bucket": "undefined_reference",
+      "segment": "compile",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; Aether has no runtime segment)",
+      "system": "Aether",
+      "bucket": "undefined_reference",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total - summary.by_bucket.undefined_reference.aether_caught",
+      "system": "Aether",
+      "bucket": "undefined_reference",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total",
+      "bucket": "undefined_reference",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.aether_caught",
+      "system": "Aether",
+      "bucket": "missing_field",
+      "segment": "compile",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; Aether has no runtime segment)",
+      "system": "Aether",
+      "bucket": "missing_field",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total - summary.by_bucket.missing_field.aether_caught",
+      "system": "Aether",
+      "bucket": "missing_field",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total",
+      "bucket": "missing_field",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.aether_caught",
+      "system": "Aether",
+      "bucket": "duplicate_definition",
+      "segment": "compile",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; Aether has no runtime segment)",
+      "system": "Aether",
+      "bucket": "duplicate_definition",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total - summary.by_bucket.duplicate_definition.aether_caught",
+      "system": "Aether",
+      "bucket": "duplicate_definition",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total",
+      "bucket": "duplicate_definition",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; LangChain has no compile segment)",
+      "system": "LangChain",
+      "bucket": "type_mismatch",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "type_mismatch",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total - summary.by_bucket.type_mismatch.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "type_mismatch",
+      "segment": "missed",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total",
+      "bucket": "type_mismatch",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; LangChain has no compile segment)",
+      "system": "LangChain",
+      "bucket": "undefined_reference",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "undefined_reference",
+      "segment": "runtime",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total - summary.by_bucket.undefined_reference.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "undefined_reference",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total",
+      "bucket": "undefined_reference",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; LangChain has no compile segment)",
+      "system": "LangChain",
+      "bucket": "missing_field",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "missing_field",
+      "segment": "runtime",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total - summary.by_bucket.missing_field.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "missing_field",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total",
+      "bucket": "missing_field",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; LangChain has no compile segment)",
+      "system": "LangChain",
+      "bucket": "duplicate_definition",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "duplicate_definition",
+      "segment": "runtime",
+      "value": 2
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total - summary.by_bucket.duplicate_definition.lc_caught_at_runtime",
+      "system": "LangChain",
+      "bucket": "duplicate_definition",
+      "segment": "missed",
+      "value": 3
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total",
+      "bucket": "duplicate_definition",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; DSPy has no compile segment)",
+      "system": "DSPy",
+      "bucket": "type_mismatch",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "type_mismatch",
+      "segment": "runtime",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total - summary.by_bucket.type_mismatch.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "type_mismatch",
+      "segment": "missed",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.type_mismatch.total",
+      "bucket": "type_mismatch",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; DSPy has no compile segment)",
+      "system": "DSPy",
+      "bucket": "undefined_reference",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "undefined_reference",
+      "segment": "runtime",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total - summary.by_bucket.undefined_reference.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "undefined_reference",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.undefined_reference.total",
+      "bucket": "undefined_reference",
+      "field": "total",
+      "value": 10
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; DSPy has no compile segment)",
+      "system": "DSPy",
+      "bucket": "missing_field",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "missing_field",
+      "segment": "runtime",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total - summary.by_bucket.missing_field.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "missing_field",
+      "segment": "missed",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.missing_field.total",
+      "bucket": "missing_field",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "(constant 0; DSPy has no compile segment)",
+      "system": "DSPy",
+      "bucket": "duplicate_definition",
+      "segment": "compile",
+      "value": 0
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "duplicate_definition",
+      "segment": "runtime",
+      "value": 2
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total - summary.by_bucket.duplicate_definition.dspy_caught_at_runtime",
+      "system": "DSPy",
+      "bucket": "duplicate_definition",
+      "segment": "missed",
+      "value": 3
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "summary.by_bucket.duplicate_definition.total",
+      "bucket": "duplicate_definition",
+      "field": "total",
+      "value": 5
+    },
+    {
+      "file": "ablation_typesafety_v1.json",
+      "json_path": "methodology_notes.cd_substitution",
+      "field": "methodology_notes.cd_substitution",
+      "value": "The original ablation design included a circular_dependency category, but verification revealed that aetherc's source-level cd detector is currently preempted by semantic analysis on programs that contain other issues; the SemanticError::CircularDependency variant is defined but never emitted. Rather than fabricate test cases that would not trigger the intended error path, we substituted duplicate_definition tests, which exercise a different but more practically significant error class (silent shadowing in Python is more dangerous than a circular dependency, which typically manifests as RecursionError or ImportError -- loud and visible). The cd detection gap is tracked at https://github.com/sowadalmughni/aether-lang/issues/4 and is targeted for a follow-up compiler release."
+    }
+  ]
+}

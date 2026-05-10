@@ -1,0 +1,116 @@
+{
+  "figure": "parallel_speedup",
+  "caption": "Sequential vs parallel p50 latency (ms) on the parallelization ablation. Speedup factors are paired BCa bootstrap with n_resamples=10000, seed=42 (definition stored alongside the value in the source JSON). Source: ablation_parallel_v1.json.",
+  "sources": [
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[0].latency_p50_ms.mean",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 206.0
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[0].latency_p50_ms.ci95",
+      "dataset": "customer_support_100",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        205.4,
+        206.6
+      ]
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[1].latency_p50_ms.mean",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 139.4
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[1].latency_p50_ms.ci95",
+      "dataset": "customer_support_100",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        139.0,
+        139.8
+      ]
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[2].speedup.speedup_p50.mean",
+      "dataset": "customer_support_100",
+      "field": "speedup_p50.mean",
+      "value": 1.4777800616649537
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[2].speedup.speedup_p50.ci95",
+      "dataset": "customer_support_100",
+      "field": "speedup_p50.ci95",
+      "value": [
+        1.4727852004110997,
+        1.4848920863309352
+      ]
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[3].latency_p50_ms.mean",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.mean",
+      "value": 218.6
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[3].latency_p50_ms.ci95",
+      "dataset": "document_analysis_50",
+      "config": "sequential",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        218.2,
+        219.0
+      ]
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[4].latency_p50_ms.mean",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.mean",
+      "value": 84.6
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[4].latency_p50_ms.ci95",
+      "dataset": "document_analysis_50",
+      "config": "parallel",
+      "field": "latency_p50_ms.ci95",
+      "value": [
+        84.1,
+        85.2
+      ]
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[5].speedup.speedup_p50.mean",
+      "dataset": "document_analysis_50",
+      "field": "speedup_p50.mean",
+      "value": 2.5840550238573576
+    },
+    {
+      "file": "ablation_parallel_v1.json",
+      "json_path": "results[5].speedup.speedup_p50.ci95",
+      "dataset": "document_analysis_50",
+      "field": "speedup_p50.ci95",
+      "value": [
+        2.5634618743168396,
+        2.5985911524373067
+      ]
+    }
+  ]
+}

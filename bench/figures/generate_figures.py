@@ -2,11 +2,12 @@
 """
 bench/figures/generate_figures.py
 
-Produces the five publication figures referenced from whitepaper/latex/aether.tex
-by reading the committed JSON results in bench/results/. No values are
-fabricated, smoothed, rounded, or interpolated: every plotted number is a
-direct json.load() lookup, and every figure has a sibling <name>.json sidecar
-listing the exact source file + JSON path + value for each plotted point.
+Produces the four data-driven publication figures referenced from
+whitepaper/WHITEPAPER_ACADEMIC.md by reading the committed JSON results in
+bench/results/. No values are fabricated, smoothed, rounded, or interpolated:
+every plotted number is a direct json.load() lookup, and every figure has a
+sibling <name>.json sidecar listing the exact source file + JSON path + value
+for each plotted point.
 
 Run (from repo root):
     python bench/figures/generate_figures.py
@@ -14,12 +15,14 @@ Run (from repo root):
 Or, for byte-stable container output:
     bash bench/figures/regenerate.sh
 
-Output: whitepaper/latex/figures/{cross_system_latency,parallel_speedup,
-        cache_hit_rate,type_safety_corpus,security_outcome}.{pdf,json}
+Output: whitepaper/figures/{cross_system_latency,parallel_speedup,
+        type_safety_corpus,security_outcome}.{png,json}
 
-The figure column width is set for a single-column article (6.5in). The paper
-template (whitepaper/latex/aether.tex via header.tex) is single-column; if it
-were ever switched to twocolumn, drop COL_W to 3.3in.
+The fifth figure (compiler_pipeline.png) is rendered separately from
+whitepaper/figures/compiler_pipeline.mmd via mermaid-cli; not produced here.
+
+PNGs are rasterised at 300 DPI on a white background with tight bounding
+boxes for embedding into pandoc's docx output.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ import numpy as np  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 RESULTS = REPO / "bench" / "results"
-OUT = REPO / "whitepaper" / "latex" / "figures"
+OUT = REPO / "whitepaper" / "figures"
 
 COL_W = 6.5  # inches; single-column article
 
@@ -96,8 +99,8 @@ def write_sidecar(stem: str, caption: str, sources: list[dict]) -> None:
 
 
 def save(fig, stem: str) -> None:
-    path = OUT / f"{stem}.pdf"
-    fig.savefig(path)
+    path = OUT / f"{stem}.png"
+    fig.savefig(path, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"wrote {path.relative_to(REPO).as_posix()}  (sidecar: {stem}.json)")
 
@@ -252,81 +255,6 @@ def fig2_parallel_speedup() -> None:
     )
     write_sidecar("parallel_speedup", caption, sources)
     save(fig, "parallel_speedup")
-
-
-# ---------------------------------------------------------------------------
-# FIG-3: cache_hit_rate
-# ---------------------------------------------------------------------------
-
-def fig3_cache_hit_rate() -> None:
-    cache = load_json("ablation_cache_v1.json")
-    modes = ["no_cache", "l1_exact_match", "repeat_warm"]
-    datasets = ["customer_support_100", "customer_support_repeat_100"]
-
-    fig, ax = plt.subplots(figsize=(COL_W, 2.8))
-    sources: list[dict] = []
-    x = np.arange(len(modes))
-    width = 0.38
-    colors = {"customer_support_100": "#7f7f7f", "customer_support_repeat_100": "#1f77b4"}
-
-    for j, dataset in enumerate(datasets):
-        means: list[float] = []
-        degenerate: list[bool] = []
-        errs_lo: list[float] = []
-        errs_hi: list[float] = []
-        for mode in modes:
-            idx, elem = find_result(cache["results"], dataset=dataset, config=mode)
-            m = elem["cache_hit_rate"]["mean"]
-            ci = elem["cache_hit_rate"]["ci95"]
-            lo, hi = asym_err(m, ci)
-            means.append(m)
-            errs_lo.append(lo)
-            errs_hi.append(hi)
-            degenerate.append(ci[0] == ci[1])
-            sources.append({
-                "file": "ablation_cache_v1.json",
-                "json_path": f"results[{idx}].cache_hit_rate.mean",
-                "dataset": dataset, "config": mode,
-                "field": "cache_hit_rate.mean", "value": m,
-            })
-            sources.append({
-                "file": "ablation_cache_v1.json",
-                "json_path": f"results[{idx}].cache_hit_rate.ci95",
-                "dataset": dataset, "config": mode,
-                "field": "cache_hit_rate.ci95", "value": ci,
-            })
-        offsets = x + (j - 0.5) * width
-        ax.bar(
-            offsets, means, width, yerr=[errs_lo, errs_hi], capsize=3,
-            color=colors[dataset], edgecolor="black", linewidth=0.5,
-            label=dataset,
-        )
-        for xi, m, deg in zip(offsets, means, degenerate):
-            if deg:
-                ax.text(
-                    xi, m + 0.02, "deg.",
-                    ha="center", va="bottom", fontsize=6.0, rotation=90,
-                    color="#444",
-                )
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(modes)
-    ax.set_ylabel("cache hit rate")
-    ax.set_ylim(0, 1.18)
-    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.legend(loc="upper left", frameon=False)
-    fig.tight_layout()
-
-    caption = (
-        "Cache hit rate by mode on the caching ablation. The unique-query "
-        "workload (customer_support_100) demonstrates L1's null effect; the "
-        "repeat-injected workload (customer_support_repeat_100) demonstrates "
-        "L1 effectiveness. Bars whose 95% CI collapses to a single value "
-        "(per_trial values identical across all 5 trials) are labeled "
-        "'(degenerate CI)'. Source: ablation_cache_v1.json."
-    )
-    write_sidecar("cache_hit_rate", caption, sources)
-    save(fig, "cache_hit_rate")
 
 
 # ---------------------------------------------------------------------------
@@ -598,7 +526,6 @@ def main() -> int:
 
     fig1_cross_system_latency()
     fig2_parallel_speedup()
-    fig3_cache_hit_rate()
     fig4_type_safety_corpus()
     fig5_security_outcome()
     return 0

@@ -5,8 +5,8 @@
 # container so output is byte-reproducible against the matplotlib
 # version pinned in bench/requirements.txt. The container mounts the
 # repo at /aether (see docker-compose.yml -> bench service), so the
-# script writes its PDFs and JSON sidecars directly into the host
-# whitepaper/latex/figures/ directory.
+# script writes its PNGs (300 DPI) and JSON sidecars directly into the
+# host whitepaper/figures/ directory.
 #
 # Usage (from repo root or anywhere — script cd's to the repo root):
 #   bash bench/figures/regenerate.sh

@@ -115,10 +115,17 @@ def main() -> None:
     )
 
     # 4. Type-safety ablation (compile-time + mock LLM; no live runtime needed).
+    #    Pass --aetherc and --python explicitly: the runner's defaults
+    #    (target/debug/aetherc and /home/deamers_academy/.../python) are baked
+    #    against the maintainer's host machine and do not exist in the docker
+    #    image. The Dockerfile builds release-only, and the bench venv lives
+    #    at /opt/venv (== sys.executable inside this container).
     run(
         "ablation_typesafety_v1",
         [
             py, "bench/runners/ablation_typesafety.py",
+            "--aetherc", str(REPO_ROOT / "target" / "release" / "aetherc"),
+            "--python",  py,
             "--output", str(REPRO_DIR / "ablation_typesafety_v1.json"),
         ],
     )

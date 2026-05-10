@@ -207,6 +207,10 @@ Aether's design is guided by five principles, each with measurable success crite
 
 **Goal**: Reduce latency and cost through compiler-driven optimization.
 
+![Figure 1: Sequential vs parallel p50 latency, both datasets, with paired BCa speedup](figures/parallel_speedup.png)
+
+Cache hit rate: 0.7000 (L1 exact-match on the 70%-repeat workload `customer_support_repeat_100`); 1.0000 (warm cache). Latency reduction at p50: −75% (L1) and −77% (warm) vs the no-cache 144.8 ms baseline. Source: `bench/results/ablation_cache_v1.json`; full breakdown in §9.3.
+
 **Design Approach**:
 - DAG-based intermediate representation enabling parallelization
 - Compiler-generated caching strategies based on prompt structure analysis
@@ -275,7 +279,7 @@ Aether is a statically-typed, domain-specific language for LLM orchestration. Th
 
 An `llm fn` encapsulates a single LLM interaction with explicit type contracts:
 
-```aether
+```rust
 llm fn classify_sentiment(text: string) -> Sentiment {
     model: "gpt-4o",
     temperature: 0.1,
@@ -299,7 +303,7 @@ enum Sentiment { Positive, Neutral, Negative }
 
 A `flow` defines an orchestrated workflow as a directed acyclic graph:
 
-```aether
+```rust
 flow analyze_document(doc: string) -> AnalysisResult {
     // These calls can execute in parallel (no data dependency)
     let sentiment = classify_sentiment(text: doc);
@@ -329,7 +333,7 @@ flow analyze_document(doc: string) -> AnalysisResult {
 
 A `context` defines managed state across interactions:
 
-```aether
+```rust
 context ConversationState {
     history: list<Message>,
     user_preferences: UserPrefs,
@@ -361,7 +365,7 @@ Aether's type system includes:
 **Collection Types**: `list<T>`, `map<K, V>`, `optional<T>`
 
 **Constrained Types** (planned): Refinement types for values with constraints
-```aether
+```rust
 type Rating = int where 1 <= value <= 5
 type NonEmptyString = string where length > 0
 ```
@@ -370,7 +374,7 @@ type NonEmptyString = string where length > 0
 
 Aether provides structured error handling for LLM-specific failures:
 
-```aether
+```rust
 flow robust_classification(text: string) -> Sentiment {
     try {
         return classify_sentiment(text: text);
@@ -396,7 +400,7 @@ flow robust_classification(text: string) -> Sentiment {
 
 Tests are first-class language constructs:
 
-```aether
+```rust
 test "sentiment_classification_accuracy" {
     let positive_texts = golden_dataset("sentiment/positive.jsonl");
     
@@ -424,6 +428,8 @@ test "entity_extraction_completeness" {
 This section describes the Aether compiler pipeline. All compiler phases (lexer through code generator) are fully implemented. See Appendix B for detailed component status.
 
 ### 6.1 Compiler Pipeline
+
+![Figure 2: Aether compiler pipeline (5 phases). Solid arrows are implemented; dashed annotations mark roadmap status.](figures/compiler_pipeline.png)
 
 #### 6.1.1 Lexical Analysis
 
@@ -697,6 +703,8 @@ This section presents empirical results from executing the benchmark suite descr
 
 ### 9.2 Latency Analysis (H2)
 
+![Figure 3: Cross-system p50 latency across configurations and datasets — Aether vs LangChain vs DSPy](figures/cross_system_latency.png)
+
 The parallelization ablation runs `customer_support_100` and `document_analysis_50` against the runtime in two modes — `sequential` (POSTed with `?sequential=true`) and `parallel` (default) — clearing the cache before every trial in both modes so the parallelization signal is not confounded with caching. Speedup is the paired-trial BCa bootstrap of `sequential.p50 / parallel.p50`. Cells are `mean ± std [95% CI]`.
 
 **customer_support_100** (`ablation_parallel_v1.json` `results[0]`, `results[1]`, `results[2]`):
@@ -755,6 +763,8 @@ Reading guidance: the *qualitative* code-complexity contrast — Aether's `flow`
 
 ### 9.5 Type Safety Analysis (H1)
 
+![Figure 4: Type-safety corpus — caught at compile-time (Aether) vs caught at runtime / missed silently (LangChain, DSPy), per bug class](figures/type_safety_corpus.png)
+
 Error detection comparison on a 30-case corpus of intentionally malformed programs split across four buckets. For each case, an `aetherc check` is run on the `.aether` source and a `python` is run on the LangChain and DSPy equivalents; results are classified by stderr pattern (Aether) or by exit code + traceback class (Python). Source: `bench/results/ablation_typesafety_v1.json`, `summary.by_bucket` and `summary` blocks. Companion Markdown: [`bench/results/ablations_v1.md`](../bench/results/ablations_v1.md).
 
 | Bucket | Total | Aether (compile-time) | LangChain (runtime) | LangChain (missed silently) | DSPy (runtime) | DSPy (missed silently) |
@@ -789,7 +799,7 @@ The triage workflow:
 
 #### 9.6.2 Aether Implementation
 
-```aether
+```rust
 enum Urgency { Low, Medium, High, Critical }
 enum Category { Billing, TechnicalSupport, Account, General }
 
@@ -1014,6 +1024,8 @@ Aether addresses:
 3. **Tool misuse**: Agents executing tools beyond their authorization
 
 ### 11.2 Compile-Time Taint Tracking
+
+![Figure 5: Compile-time catch rate vs runtime ASR per configuration on the 60-case adapted InjecAgent corpus](figures/security_outcome.png)
 
 The compiler will distinguish:
 

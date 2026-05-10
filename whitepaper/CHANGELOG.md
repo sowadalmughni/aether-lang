@@ -1,8 +1,8 @@
 # Aether Whitepaper Changelog
 
-**Current Version**: 3.0  
-**Last Updated**: May 8, 2026  
-**Status**: Prototype - Runtime, real-API, security suite all measured
+**Current Version**: 3.0.1  
+**Last Updated**: May 10, 2026  
+**Status**: Prototype - Runtime, real-API, security suite all measured; reproduce.sh end-to-end clean
 
 ---
 
@@ -10,6 +10,7 @@
 
 | Version | Date | Status | Summary |
 |---------|------|--------|---------|
+| 3.0.1 | May 10, 2026 | Reproducibility patches | `bench/requirements.txt` openai/litellm pins reconciled; `bench/run_all_mock.py` orchestrator paths fixed for the docker image; `aether_mock_v1.json` and `dspy_v1.json` references refreshed for per-trial `tokens_total` (added post-cc49f3d); `reproduce.sh` now runs end-to-end with verifier verdict "numeric drift within informational tolerance (exit 0)" |
 | 3.0 | May 8, 2026 | Measured-data revision | Runtime executed; every numeric claim now traces to a JSON in `bench/results/`; "(projected)" labels removed; Reproducibility callout, Statistical Methodology, HotpotQA + Security results, hardware-variance threat added |
 | 2.7 | Feb 5, 2026 | Telemetry & Benchmarks | OTLP tracing re-enabled, criterion benchmarks, OpenTelemetry 0.21.0 |
 | 2.6 | Feb 4, 2026 | Full Benchmark Suite | Synthetic datasets, benchmark runner, provider switching, CI integration |
@@ -20,6 +21,57 @@
 | 2.1 | Feb 2026 | Phase 1 Complete | Parser, semantic analysis, code generator, CLI |
 | 2.0 | Feb 2026 | Major Revision | Research update, restructured whitepaper |
 | 1.0 | Jul 2025 | Initial Draft | Original whitepaper |
+
+---
+
+## [3.0.1] - May 10, 2026
+
+### Summary
+Artifact-evaluation reproducibility patch. No paper-level numbers change; the v3.0 measured-data claims continue to hold. This revision fixes the issues a third party would hit running `reproduce.sh` from a fresh clone, and refreshes the two reference JSONs whose per-trial `tokens_total` field was committed before the token-tracking commit (cc49f3d) and therefore failed the strict `exact_required` diff.
+
+### Fixed — bench/requirements.txt
+- `openai==1.55.0` was unresolvable: `langchain-openai==0.2.14` requires `openai>=1.58.1,<2.0.0`. Bumped to `openai==1.58.1` (commit `296819c`).
+- `openai==1.58.1` was *also* unresolvable once `litellm` (transitive via `dspy==2.6.27`'s `litellm>=1.60.3`) tightened its lower bound on openai through 2025-2026 (1.61 → 1.66.1 → 1.68.2 → 2.8.0 at 1.80+). Bumped to `openai==1.68.2` and pinned `litellm==1.69.2` explicitly so pip cannot silently drift onto a litellm version that requires `openai>=2.8.0` and breaks `langchain-openai`'s `<2.0.0` cap (commit `912670f`).
+
+### Fixed — bench/run_all_mock.py orchestrator
+- `bench/runners/ablation_typesafety.py` defaults to `target/debug/aetherc` and `/home/deamers_academy/aether-bench-venv/bin/python` — both maintainer-host artifacts that do not exist in the docker image (Dockerfile builds release-only; the bench venv lives at `/opt/venv`). The runner exposes `--aetherc` and `--python` overrides; the orchestrator now passes them explicitly with the correct in-container paths (commit `a838fb5`).
+- `bench/baselines/aether_hotpot.py` does not have a `--mode` flag (mock vs real-API is a property of the runtime it talks to). The orchestrator was passing `--mode mock` and aborting the suite with `argparse: unrecognized arguments`. The argument is now omitted; the runtime container's `AETHER_PROVIDER=mock` continues to drive mock mode (commit `2f50a4a`).
+
+### Refreshed — committed reference JSONs
+- `bench/results/aether_mock_v1.json` and `bench/results/dspy_v1.json` were committed at 852be6e and 7d2be1c respectively (2026-05-03), *before* commit cc49f3d ("feat(bench): record real OpenAI token usage per trial") added per-trial token tracking. Their `results[*].raw_trial_results[*].tokens_total` field was uniformly `0`. The current bench code correctly emits real counts (deterministic in mock mode: 34817 for `customer_support_100`, 25885 for `document_analysis_50`, 88686 / 52259 for the dspy variants). Both reference JSONs are refreshed to match current code; `bench/results/aether_mock_v1.md` is regenerated from the same run.
+
+### Acceptance verification
+```
+$ docker compose -p aether-repro up -d runtime  # healthy
+$ docker exec aether-bench-run python bench/run_all_mock.py
+[aether_mock_v1] exit=0
+[ablation_cache_v1] exit=0
+[ablation_parallel_v1] exit=0
+[ablation_typesafety_v1] exit=0
+[langchain_v1] exit=0
+[dspy_v1] exit=0
+[hotpotqa_aether_v1] exit=0
+[hotpotqa_langchain_v1] exit=0
+[hotpotqa_dspy_v1] exit=0
+
+$ python bench/verify_reproduction.py --reference bench/results --produced bench/results/repro \
+      --tolerance bench/verify_tolerance.toml --report bench/results/repro/DIFF_REPORT.md
+ablation_cache_v1.json: numeric drift (within informational tolerance)
+ablation_parallel_v1.json: numeric drift (within informational tolerance)
+ablation_typesafety_v1.json: ok
+aether_mock_v1.json: ok
+aether_real_api_v1.json: n/a (requires OPENAI_API_KEY)
+dspy_v1.json: ok
+hotpotqa_aether_v1.json: numeric drift (within informational tolerance)
+hotpotqa_dspy_v1.json: numeric drift (within informational tolerance)
+hotpotqa_langchain_v1.json: numeric drift (within informational tolerance)
+langchain_v1.json: numeric drift (within informational tolerance)
+real_api_v1.json: n/a (requires OPENAI_API_KEY)
+security_v1.json: n/a (requires OPENAI_API_KEY)
+VERDICT: numeric drift within informational tolerance (exit 0)
+```
+
+The "numeric drift" rows are latency-only (different host hardware than the reference Linux i5-8250U; the reference percentile means lie within ±25–50% bands per `bench/verify_tolerance.toml`). All `exact_required` structural fields match.
 
 ---
 

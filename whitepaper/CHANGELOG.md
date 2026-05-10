@@ -1,8 +1,8 @@
 # Aether Whitepaper Changelog
 
-**Current Version**: 3.0.1  
+**Current Version**: 3.0.2  
 **Last Updated**: May 10, 2026  
-**Status**: Prototype - Runtime, real-API, security suite all measured; reproduce.sh end-to-end clean
+**Status**: Prototype - Runtime, real-API, security suite all measured; reproduce.sh end-to-end clean; whitepaper consolidated to single canonical source via pandoc/docx
 
 ---
 
@@ -10,6 +10,7 @@
 
 | Version | Date | Status | Summary |
 |---------|------|--------|---------|
+| 3.0.2 | May 10, 2026 | Single canonical paper, pandoc/docx pipeline | LaTeX/PDF pipeline removed (archived to `whitepaper/archive/latex/`); `WHITEPAPER_ACADEMIC.md` is the sole markdown source of truth; figure set reduced from 10 to 5 PNGs (300 DPI) at `whitepaper/figures/`; 7 ` ```aether ` fences retagged ` ```rust ` for skylighting; `whitepaper/aether.docx` is the canonical build output (49 pages, 490866 bytes via pandoc 3.9.0.2). No measurement-data delta from 3.0.1. |
 | 3.0.1 | May 10, 2026 | Reproducibility patches | `bench/requirements.txt` openai/litellm pins reconciled; `bench/run_all_mock.py` orchestrator paths fixed for the docker image; `aether_mock_v1.json` and `dspy_v1.json` references refreshed for per-trial `tokens_total` (added post-cc49f3d); `reproduce.sh` now runs end-to-end with verifier verdict "numeric drift within informational tolerance (exit 0)" |
 | 3.0 | May 8, 2026 | Measured-data revision | Runtime executed; every numeric claim now traces to a JSON in `bench/results/`; "(projected)" labels removed; Reproducibility callout, Statistical Methodology, HotpotQA + Security results, hardware-variance threat added |
 | 2.7 | Feb 5, 2026 | Telemetry & Benchmarks | OTLP tracing re-enabled, criterion benchmarks, OpenTelemetry 0.21.0 |
@@ -21,6 +22,86 @@
 | 2.1 | Feb 2026 | Phase 1 Complete | Parser, semantic analysis, code generator, CLI |
 | 2.0 | Feb 2026 | Major Revision | Research update, restructured whitepaper |
 | 1.0 | Jul 2025 | Initial Draft | Original whitepaper |
+
+---
+
+## [3.0.2] - May 10, 2026
+
+### Summary
+LaTeX/PDF pipeline replaced with pandoc/docx. Whitepaper consolidated to a single canonical source (`WHITEPAPER_ACADEMIC.md`); figure set reduced from 10 PDFs to 5 PNGs (300 DPI). No measurement-data delta from 3.0.1; every numeric claim still traces to the same JSONs in `bench/results/`.
+
+### Changed — pipeline
+- `whitepaper/Makefile`: rewritten as a single `docx` target driving `pandoc -> docx` with `--reference-doc=reference.docx`, `--syntax-highlighting=tango`, `--metadata-file=metadata.yml`, `--toc --toc-depth=2`, `--resource-path=.:figures`. Tectonic and the LaTeX preamble/header.tex/preprocess_md.py are no longer used.
+- `bench/figures/generate_figures.py`: emits PNG (300 DPI, white background, tight bbox) to `whitepaper/figures/`. Was: PDF to `whitepaper/latex/figures/`. Function `fig3_cache_hit_rate` removed; the cache numbers (0.7000 L1 hit rate, 1.0000 warm, −75% / −77% latency reduction vs the 144.8 ms baseline — all from `bench/results/ablation_cache_v1.json`) fold into a one-line summary beneath the §4.2 parallel_speedup figure caption. No new measurements introduced.
+- `bench/figures/regenerate.sh`: header comment updated to reflect new path/format.
+
+### Changed — markdown source
+- `WHITEPAPER_ACADEMIC.md`: 7 ` ```aether ` code fences retagged ` ```rust ` (lines previously at 278, 302, 332, 364, 373, 399, 792) so pandoc's skylighting renders Rust-grammar syntax highlighting in the docx, which colorises `fn`/`let`/`match`/`enum`/`struct`/`if`/`else` correctly for the Aether code samples.
+- `WHITEPAPER_ACADEMIC.md`: 5 inline figure references inserted at sections 4.2, 6.1, 9.2, 9.5, 11.2 — `parallel_speedup.png`, `compiler_pipeline.png`, `cross_system_latency.png`, `type_safety_corpus.png`, `security_outcome.png`. The cache one-liner sits beneath the §4.2 figure.
+
+### Added
+- `whitepaper/figures/` — 5 PNGs (300 DPI) + 4 JSON sidecars + `compiler_pipeline.mmd` source.
+  - `cross_system_latency.png` (83 KB) + sidecar — sourced from `aether_mock_v1.json`, `langchain_v1.json`, `dspy_v1.json`
+  - `parallel_speedup.png` (76 KB) + sidecar — sourced from `ablation_parallel_v1.json`
+  - `type_safety_corpus.png` (99 KB) + sidecar — sourced from `ablation_typesafety_v1.json`
+  - `security_outcome.png` (123 KB) + sidecar — sourced from `security_v1.json`
+  - `compiler_pipeline.png` (101 KB) — rendered from `compiler_pipeline.mmd` via mermaid-cli (mmdc 10.9.1 -e png -s 2 -b white -t default); not data-driven, no sidecar.
+- `whitepaper/metadata.yml` — title, author, date, abstract (verbatim 3-paragraph copy from WHITEPAPER_ACADEMIC.md), 5 keywords.
+- `whitepaper/reference.docx` — pandoc default reference docx (`pandoc -o reference.docx --print-default-data-file reference.docx`); 11 KB. Editable later for typography.
+- `whitepaper/aether.docx` — build output (490866 bytes; 49 pages via libreoffice headless conversion). Committed as a final artefact rather than ignored.
+
+### Removed (archived to `whitepaper/archive/`, not deleted)
+- `whitepaper/WHITEPAPER.md` (engineering reference; superseded by the single canonical paper).
+- `whitepaper/aether-whitepaper-academic-changes.md` (diff log between the two papers).
+- `whitepaper/audit_mapping.md`, `whitepaper/benchmark_metrics.md`, `whitepaper/TODO.md` (scratch notes).
+- `whitepaper/latex/` (entire directory: aether.tex, aether.pdf, aether.log, aether.aux, aether.preprocessed.md, header.tex, references.bib, preprocess_md.py, arxiv.sty, SUBMISSION.md, figures/PDFs).
+- `whitepaper/diagrams/` (entire directory: 5 .mmd sources + render.sh; only compiler_pipeline.mmd is rerendered as PNG and lives at `whitepaper/figures/compiler_pipeline.mmd`).
+
+### Acceptance verification
+```
+$ ls whitepaper/
+CHANGELOG.md  Makefile  WHITEPAPER_ACADEMIC.md  aether.docx  archive  figures  metadata.yml  reference.docx
+
+$ ls whitepaper/figures/
+compiler_pipeline.mmd  compiler_pipeline.png  cross_system_latency.json
+cross_system_latency.png  parallel_speedup.json  parallel_speedup.png
+security_outcome.json  security_outcome.png  type_safety_corpus.json
+type_safety_corpus.png
+
+$ ls whitepaper/archive/
+TODO.md  WHITEPAPER.md  aether-whitepaper-academic-changes.md  audit_mapping.md
+benchmark_metrics.md  diagrams  latex
+
+$ test ! -e "Aether Programming Language.md" && echo absent
+absent
+
+$ grep -nE '^```aether' whitepaper/WHITEPAPER_ACADEMIC.md ; echo "exit=$?"
+exit=1   # no hits
+
+$ grep -c '!\[Figure' whitepaper/WHITEPAPER_ACADEMIC.md
+5
+
+$ pandoc whitepaper/WHITEPAPER_ACADEMIC.md \
+    --from=markdown+pipe_tables+grid_tables+raw_html --to=docx \
+    --reference-doc=whitepaper/reference.docx --resource-path=.:whitepaper:whitepaper/figures \
+    --syntax-highlighting=tango --metadata-file=whitepaper/metadata.yml \
+    --toc --toc-depth=2 -o whitepaper/aether.docx
+# (no stdout, no warnings, exit 0)
+
+$ wc -c whitepaper/aether.docx
+490866 whitepaper/aether.docx
+
+$ "/c/Program Files/LibreOffice/program/soffice.exe" --headless \
+    --convert-to pdf whitepaper/aether.docx --outdir /tmp/
+convert E:\Project\aether-lang\whitepaper\aether.docx as a Writer document
+  -> /tmp/aether.pdf using filter : writer_pdf_Export
+# exit 0; PDF size 1437428 bytes
+
+$ python -c "import pypdf; r=pypdf.PdfReader('/tmp/aether.pdf'); print(len(r.pages))"
+49
+```
+
+The PDF was inspected programmatically (pypdf): page 1 contains the title, author, date, full abstract, and "Table of Contents" heading; all 5 figure captions are present at pages 11 (Fig 1), 18 (Fig 2), 26 (Fig 3), 30 (Fig 4), and 39 (Fig 5). The PDF is the headless sanity-check artefact and is **not** committed; users open `whitepaper/aether.docx` in Word or LibreOffice GUI for final visual review of code-block colouring, table layout, and figure placement.
 
 ---
 

@@ -11,7 +11,7 @@ A programming language designed for efficient, reliable, and scalable Large Lang
 
 Aether transforms LLM integration from fragile scripting into robust, engineered systems. By providing first-class abstractions for LLM orchestration, intelligent caching, and type-safe prompt management, Aether enables developers to build production-grade AI applications with confidence.
 
-**Current Status**: v3.0 — measured-data revision. Every benchmark claim previously labelled "projected" now resolves to a JSON file under [`bench/results/`](bench/results/). Whitepaper version: v3.2-academic ([`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md), PDF at [`whitepaper/latex/aether.pdf`](whitepaper/latex/aether.pdf)).
+**Current Status**: v3.0.2 — single canonical paper, pandoc/docx pipeline. Every benchmark claim previously labelled "projected" still resolves to a JSON file under [`bench/results/`](bench/results/) (no measurement-data delta from v3.0). Whitepaper: [`whitepaper/aether.docx`](whitepaper/aether.docx) (canonical), markdown source at [`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md). The prior LaTeX/PDF pipeline is preserved at [`whitepaper/archive/latex/`](whitepaper/archive/latex/) for reference.
 
 ### Key Features
 
@@ -246,9 +246,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Resources
 
-- **Paper (publication version)**: [`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md) or compiled PDF at [`whitepaper/latex/aether.pdf`](whitepaper/latex/aether.pdf)
-- **Engineering reference**: [`whitepaper/WHITEPAPER.md`](whitepaper/WHITEPAPER.md)
-- **Reproducibility**: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
+- **Paper (canonical)**: [`whitepaper/aether.docx`](whitepaper/aether.docx) — built via `make -C whitepaper docx`
+- **Paper (markdown source)**: [`whitepaper/WHITEPAPER_ACADEMIC.md`](whitepaper/WHITEPAPER_ACADEMIC.md)
+- **Figures**: [`whitepaper/figures/`](whitepaper/figures/) (5 PNGs at 300 DPI; data figures have JSON sidecars listing source field paths in `bench/results/`)
+- **Reproducibility**: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) and `bash reproduce.sh`
 - **Build instructions**: [`docs/BUILD.md`](docs/BUILD.md)
 - **Baseline benchmarks**: [`bench/baselines/README.md`](bench/baselines/README.md)
 - **Changelog**: [`whitepaper/CHANGELOG.md`](whitepaper/CHANGELOG.md)

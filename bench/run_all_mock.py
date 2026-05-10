@@ -155,11 +155,14 @@ def main() -> None:
     )
 
     # 7. HotpotQA: Aether RAG (mock).
+    #    aether_hotpot.py does not accept --mode (mock vs openai is a property
+    #    of the runtime it talks to, not the baseline script). The runtime
+    #    container has AETHER_PROVIDER=mock, so this run is mock-mode by
+    #    construction.
     run(
         "hotpotqa_aether_v1",
         [
             py, "bench/baselines/aether_hotpot.py",
-            "--mode", "mock",
             "--trials", "3",
             "--runtime-url", RUNTIME_URL,
             "--no-autostart",
